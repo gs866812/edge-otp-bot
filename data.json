@@ -1,0 +1,26 @@
+{
+  "adminId": 7495641135,
+  "users": {
+    "7495641135": {
+      "id": 7495641135,
+      "role": "admin",
+      "isActive": true,
+      "assigned": {},
+      "pulledCount": 0,
+      "otpSuccessNumbers": []
+    }
+  },
+  "availableNumbers": [],
+  "numberOwner": {},
+  "requests": [
+    {
+      "id": 1,
+      "userId": "7598185964",
+      "amount": 2000,
+      "status": "rejected",
+      "createdAt": "2025-12-14T12:13:13.719Z",
+      "decidedAt": "2025-12-14T12:13:40.003Z"
+    }
+  ],
+  "nextRequestId": 2
+}

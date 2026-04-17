@@ -1,0 +1,6 @@
+Auto approve 20 numbers
+Request again after 15 min
+User get otp only from his pulled numbers
+Autoreply off
+Unused numbers goes to available when clear user statistics
+Rset data without user list
