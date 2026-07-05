@@ -1,394 +1,134 @@
 {
-  "availableNumbers": [],
-  "assignedNumbers": {},
-  "pullRequests": [
-    {
-      "id": 1,
-      "userId": "7598185964",
-      "amount": 10,
-      "status": "rejected",
-      "createdAt": "2025-12-25T11:01:21.645Z"
-    }
-  ],
-  "teamUsers": {
-    "1230631567": {
-      "name": "Pradip",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766637182640,
-      "lastAutoSentByNumber": {}
-    },
-    "6085016532": {
-      "name": "Alim v",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766634001510,
-      "lastAutoSentByNumber": {}
-    },
-    "7731690239": {
-      "name": "Jamil",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766636372383,
-      "lastAutoSentByNumber": {}
-    },
-    "7542566479": {
-      "name": "Bhabi",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766630390385,
-      "lastAutoSentByNumber": {}
-    },
-    "8001622969": {
-      "name": "Sehad",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766627815480,
-      "lastAutoSentByNumber": {}
-    },
-    "8107052647": {
-      "name": "Rabbani",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766633632975,
-      "lastAutoSentByNumber": {}
-    },
-    "7714436742": {
-      "name": "Jibon",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766633372519,
-      "lastAutoSentByNumber": {}
-    },
-    "7249299512": {
-      "name": "Rahim",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766553657723,
-      "lastAutoSentByNumber": {}
-    },
-    "7268228526": {
-      "name": "Shabib",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766636450301,
-      "lastAutoSentByNumber": {}
-    },
-    "7631584881": {
-      "name": "Jafirul",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766489677527,
-      "lastAutoSentByNumber": {}
-    },
-    "8347827708": {
-      "name": "Saikot",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766489648494,
-      "lastAutoSentByNumber": {}
-    },
-    "8328181709": {
-      "name": "Jafirul-2",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766618450887,
-      "lastAutoSentByNumber": {}
-    },
-    "7728086794": {
-      "name": "Jafirul-3",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 0,
-      "lastAutoSentByNumber": {}
-    },
-    "8542776459": {
-      "name": "Hasan-1",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766413589004,
-      "lastAutoSentByNumber": {}
-    },
-    "6643337269": {
-      "name": "Hasan-2",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766636167866,
-      "lastAutoSentByNumber": {}
-    },
-    "8369968607": {
-      "name": "Jamil-2",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766415402650,
-      "lastAutoSentByNumber": {}
-    },
-    "7689128842": {
-      "name": "Arman",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766631849184,
-      "lastAutoSentByNumber": {}
-    },
-    "7730329961": {
-      "name": "Naim AR",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766607788486,
-      "lastAutoSentByNumber": {}
-    },
-    "7655514997": {
-      "name": "Shawon AR",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766627613755,
-      "lastAutoSentByNumber": {}
-    },
-    "7909530890": {
-      "name": "Mohsin AR",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766464602160,
-      "lastAutoSentByNumber": {}
-    },
-    "7432230192": {
-      "name": "Rudrro AR",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766622369585,
-      "lastAutoSentByNumber": {}
-    },
-    "6612040891": {
-      "name": "Jahid",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766308268401,
-      "lastAutoSentByNumber": {}
-    },
-    "8175995967": {
-      "name": "Touhid",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766631400773,
-      "lastAutoSentByNumber": {}
-    },
-    "8138585501": {
-      "name": "Sohel R",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 0,
-      "lastAutoSentByNumber": {}
-    },
-    "7708663290": {
-      "name": "Mamun",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766512298096,
-      "lastAutoSentByNumber": {}
-    },
-    "7894900109": {
-      "name": "Rion",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766553732002,
-      "lastAutoSentByNumber": {}
-    },
-    "8146074977": {
-      "name": "Paran",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766632089620,
-      "lastAutoSentByNumber": {}
-    },
-    "8594600458": {
-      "name": "Nabil",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766635980420,
-      "lastAutoSentByNumber": {}
-    },
-    "7075142614": {
-      "name": "Zihad",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766508538808,
-      "lastAutoSentByNumber": {}
-    },
-    "8088365896": {
-      "name": "Palash",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766384486192,
-      "lastAutoSentByNumber": {}
-    },
-    "7294484201": {
-      "name": "Habib",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 0,
-      "lastAutoSentByNumber": {}
-    },
-    "8242171507": {
-      "name": "Sagor AL",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766627543673,
-      "lastAutoSentByNumber": {}
-    },
-    "8344860368": {
-      "name": "Sojib",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766492960477,
-      "lastAutoSentByNumber": {}
-    },
-    "6920677521": {
-      "name": "Jakir AR",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766538865593,
-      "lastAutoSentByNumber": {}
-    },
-    "6771431673": {
-      "name": "Moshiur",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766637366251,
-      "lastAutoSentByNumber": {}
-    },
-    "7755736134": {
-      "name": "Shohidul AL",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766637327491,
-      "lastAutoSentByNumber": {}
-    },
-    "6976661720": {
-      "name": "Rakib AR",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766511191530,
-      "lastAutoSentByNumber": {}
-    },
-    "8196328286": {
-      "name": "Kaosar",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766516270491,
-      "lastAutoSentByNumber": {}
-    },
-    "7963029079": {
-      "name": "Ador AL",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766637581957,
-      "lastAutoSentByNumber": {}
-    },
-    "8497143352": {
-      "name": "Sahos AR",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 0,
-      "lastAutoSentByNumber": {}
+  "users": {
+    "7598185964": {
+      "profileName": "Kerry 凯瑞",
+      "username": "Kerry_WS_TG",
+      "joinedAt": 1783235344737
     },
     "7495641135": {
-      "name": "User_7495641135",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766660383170,
-      "lastAutoSentByNumber": {}
-    },
-    "7598185964": {
-      "name": "Kerry",
-      "totalPulled": 0,
-      "totalOtp": 0,
-      "otpNumbers": [],
-      "submittedNumbers": [],
-      "lastRequestAt": 1766660481645,
-      "lastAutoSentByNumber": {}
+      "id": "7495641135",
+      "profileName": "Mr. Sarwar",
+      "username": "glmsarwar",
+      "joinedAt": 1783250496424
     }
   },
-  "nextRequestId": 2
+  "pendingUsers": {
+    "8051523187": {
+      "profileName": "ака",
+      "username": "",
+      "joinedAt": 1783233575156,
+      "status": "removed"
+    },
+    "8885515767": {
+      "profileName": "Llaila",
+      "username": "",
+      "joinedAt": 1783240894424,
+      "status": "removed"
+    }
+  },
+  "availableNumbers": [
+    "+992110511267",
+    "+992110511282",
+    "+992110511346",
+    "+992110511404",
+    "+992110511491",
+    "+992110511519",
+    "+992110511615",
+    "+992110511703",
+    "+992110511756",
+    "+992110511815"
+  ],
+  "assignedNumbers": {
+    "7598185964": [
+      "+992110509878",
+      "+992110511815",
+      "+992110511872",
+      "+992110511110",
+      "+992110511148",
+      "+992110511221"
+    ],
+    "7495641135": [
+      "+992110509225",
+      "+992110509914",
+      "+992110510152",
+      "+992110510193",
+      "+992110510272",
+      "+992110510287",
+      "+992110510301",
+      "+992110511021"
+    ]
+  },
+  "numberOwners": {
+    "+992110509878": "7598185964",
+    "+992110511815": "7598185964",
+    "+992110511872": "7598185964",
+    "+992110509225": "7495641135",
+    "+992110509914": "7495641135",
+    "+992110510152": "7495641135",
+    "+992110510193": "7495641135",
+    "+992110510272": "7495641135",
+    "+992110510287": "7495641135",
+    "+992110510301": "7495641135",
+    "+992110511021": "7495641135",
+    "+992110511110": "7598185964",
+    "+992110511148": "7598185964",
+    "+992110511221": "7598185964"
+  },
+  "userStats": {
+    "7598185964": {
+      "assigned": 6,
+      "successOtp": 4,
+      "noOtp": 0,
+      "withdrawCount": 0
+    },
+    "7495641135": {
+      "assigned": 8,
+      "successOtp": 3,
+      "noOtp": 0,
+      "withdrawCount": 0
+    }
+  },
+  "settings": {
+    "botEnabled": true,
+    "withdrawEnabled": false,
+    "withdrawChannelId": "/start"
+  },
+  "runtime": {
+    "waitingAddNumbers": null,
+    "waitingBroadcast": null,
+    "waitingChannelId": null,
+    "waitingRemoveUsers": null,
+    "waitingRemoveUserSingle": null,
+    "waitingSingleStats": null,
+    "waitingTestOtp": null,
+    "selectedUsersForRemoval": [],
+    "addNumberBuffer": [],
+    "activeToken": 0,
+    "lastFetch": null,
+    "otpAttempts": {},
+    "lastOtpCheck": {},
+    "waitingTestMessage": null
+  },
+  "lastOtpByNumber": {
+    "+992110511872": "56560",
+    "+992110511021": "13855",
+    "+992110510272": "45864",
+    "+992110511148": "73430",
+    "+992110509878": "61004",
+    "+992110509914": "98002",
+    "+992110511221": "48225"
+  },
+  "processedMessages": {},
+  "lastAutoSentByNumber": {},
+  "lastProcessedMessage": {
+    "+992110511872": "+992110511872|56560|05.07.2026 17:39:33",
+    "+992110511021": "+992110511021|13855|05.07.2026 18:27:37",
+    "+992110510272": "+992110510272|45864|05.07.2026 18:17:51",
+    "+992110511148": "+992110511148|73430|05.07.2026 18:31:42",
+    "+992110509298": "+992110509298|34029|05.07.2026 07:49:07",
+    "+992110508995": "+992110508995|10049|05.07.2026 07:53:25",
+    "+992110509878": "+992110509878|61004|05.07.2026 11:38:34",
+    "+992110509914": "+992110509914|98002|05.07.2026 11:35:10",
+    "+992110511221": "+992110511221|48225|05.07.2026 19:03:33"
+  }
 }

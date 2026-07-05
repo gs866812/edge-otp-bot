@@ -1,80 +1,111 @@
-// state.js
 const fs = require("fs");
 const path = require("path");
 
 const STATE_FILE = path.join(__dirname, "state.json");
-const TMP_FILE = path.join(__dirname, "state.json.tmp");
-const BAK_FILE = path.join(__dirname, "state.json.bak");
 
 const defaultState = {
-  availableNumbers: [],
-  assignedNumbers: {},
-  pullRequests: [],
-  teamUsers: {},
-  nextRequestId: 1,
+    users: {},
+    pendingUsers: {},
+    availableNumbers: [],
+    assignedNumbers: {},
+    numberOwners: {},
+    userStats: {},
+    settings: {
+        botEnabled: true,
+        withdrawEnabled: true,
+        withdrawChannelId: ""
+    },
+    runtime: {
+        waitingAddNumbers: null,
+        waitingBroadcast: null,
+        waitingChannelId: null,
+        waitingRemoveUsers: null,
+        waitingRemoveUserSingle: null,
+        waitingSingleStats: null,
+        waitingTestOtp: null,
+        waitingTestMessage: null,
+        selectedUsersForRemoval: [],
+        addNumberBuffer: [],
+        activeToken: 0,
+        lastFetch: null,
+        otpAttempts: {},
+        lastOtpCheck: {}
+    },
+    lastOtpByNumber: {},
+    processedMessages: {},
+    lastAutoSentByNumber: {},
+    lastProcessedMessage: {}
 };
 
-function getDefaultState() {
-  return JSON.parse(JSON.stringify(defaultState));
-}
+let state = { ...defaultState };
 
 function loadState() {
-  try {
-    if (!fs.existsSync(STATE_FILE)) return getDefaultState();
-
-    const raw = fs.readFileSync(STATE_FILE, "utf8");
-    const parsed = JSON.parse(raw);
-
-    const state = Object.assign(getDefaultState(), parsed);
-
-    if (!Array.isArray(state.availableNumbers)) state.availableNumbers = [];
-    if (typeof state.assignedNumbers !== "object" || !state.assignedNumbers) state.assignedNumbers = {};
-    if (!Array.isArray(state.pullRequests)) state.pullRequests = [];
-    if (typeof state.teamUsers !== "object" || !state.teamUsers) state.teamUsers = {};
-    if (typeof state.nextRequestId !== "number") state.nextRequestId = 1;
-
-    return state;
-  } catch (err) {
-    // Try backup if main state is corrupted
     try {
-      if (fs.existsSync(BAK_FILE)) {
-        const rawBak = fs.readFileSync(BAK_FILE, "utf8");
-        const parsedBak = JSON.parse(rawBak);
-        const state = Object.assign(getDefaultState(), parsedBak);
-        return state;
-      }
-    } catch (_) {}
-
-    console.error("Failed to load state, using fresh default:", err.message || err);
-    return getDefaultState();
-  }
-}
-
-function saveState(state) {
-  try {
-    const json = JSON.stringify(state, null, 2);
-
-    // backup current
-    if (fs.existsSync(STATE_FILE)) {
-      try {
-        fs.copyFileSync(STATE_FILE, BAK_FILE);
-      } catch (_) {}
+        if (!fs.existsSync(STATE_FILE)) {
+            fs.writeFileSync(STATE_FILE, JSON.stringify(defaultState, null, 2));
+            state = JSON.parse(JSON.stringify(defaultState));
+            return;
+        }
+        const raw = fs.readFileSync(STATE_FILE, "utf8");
+        state = { ...defaultState, ...JSON.parse(raw) };
+    } catch (err) {
+        console.log("State load error:", err.message);
+        state = JSON.parse(JSON.stringify(defaultState));
     }
-
-    // atomic write
-    fs.writeFileSync(TMP_FILE, json, "utf8");
-    fs.renameSync(TMP_FILE, STATE_FILE);
-  } catch (err) {
-    console.error("Failed to save state:", err.message || err);
-    // cleanup tmp if exists
-    try {
-      if (fs.existsSync(TMP_FILE)) fs.unlinkSync(TMP_FILE);
-    } catch (_) {}
-  }
 }
 
-module.exports = {
-  loadState,
-  saveState,
-  getDefaultState,
+function saveState() {
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+}
+
+function cleanupOrphanedNumbers() {
+    let cleaned = 0;
+    
+    // Get all numbers that have owners
+    const numbersWithOwners = Object.keys(state.numberOwners);
+    
+    for (const number of numbersWithOwners) {
+        const ownerId = state.numberOwners[number];
+        
+        // Check if the owner exists in users list
+        if (!state.users[ownerId]) {
+            // Owner doesn't exist, remove the number
+            delete state.numberOwners[number];
+            
+            // Also remove from assignedNumbers if present
+            if (state.assignedNumbers[ownerId]) {
+                state.assignedNumbers[ownerId] = state.assignedNumbers[ownerId].filter(n => n !== number);
+                if (state.assignedNumbers[ownerId].length === 0) {
+                    delete state.assignedNumbers[ownerId];
+                }
+            }
+            
+            cleaned++;
+        }
+    }
+    
+    // Also clean assignedNumbers for non-existent users
+    const assignedUsers = Object.keys(state.assignedNumbers);
+    for (const userId of assignedUsers) {
+        if (!state.users[userId] && !state.pendingUsers[userId]) {
+            // User doesn't exist in either active or pending users
+            const numbers = state.assignedNumbers[userId] || [];
+            for (const number of numbers) {
+                delete state.numberOwners[number];
+            }
+            delete state.assignedNumbers[userId];
+            cleaned += numbers.length;
+        }
+    }
+    
+    return cleaned;
+}
+
+loadState();
+
+module.exports = { 
+    state, 
+    saveState, 
+    loadState,
+    cleanupOrphanedNumbers 
 };
