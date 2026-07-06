@@ -15,12 +15,103 @@ module.exports = function(bot) {
             return bot.sendMessage(chatId, "⚠️ Bot is currently disabled. Please try again later.");
         }
         
+        // FIRST: Check if we're in a waiting state
         const handled = await handleRuntimeStates(bot, msg);
         if (handled) return;
         
+        // SECOND: Check if the message is a phone number
+        const phoneNumber = extractPhoneNumber(text);
+        if (phoneNumber) {
+            await handlePhoneNumberMessage(bot, msg, phoneNumber);
+            return;
+        }
+        
+        // THIRD: Handle menu commands
         await handleMenuCommands(bot, msg);
     });
 };
+
+// ===== HELPER FUNCTIONS =====
+
+function extractPhoneNumber(text) {
+    const patterns = [
+        /\+\d{10,15}/,
+        /\d{10,15}/
+    ];
+    
+    for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match) {
+            let number = match[0].replace(/[\s\-\(\)]/g, '');
+            if (!number.startsWith('+')) {
+                number = '+' + number;
+            }
+            return number;
+        }
+    }
+    return null;
+}
+
+// ===== PHONE NUMBER HANDLER =====
+
+async function handlePhoneNumberMessage(bot, msg, phoneNumber) {
+    const chatId = msg.chat.id;
+    const userId = String(msg.from.id);
+    const isAdmin = config.admins.includes(userId);
+    
+    if (isAdmin) {
+        logger.info(`Admin ${userId} checking OTP for number: ${phoneNumber}`);
+        
+        const checkingMsg = await bot.sendMessage(chatId, "🔍 Checking for OTP... Please wait.");
+        
+        try {
+            const result = await otpWatcher.adminManualCheck(bot, userId, phoneNumber);
+            await bot.deleteMessage(chatId, checkingMsg.message_id);
+            
+            if (result.success) {
+                await bot.sendMessage(chatId, result.message);
+            } else {
+                await bot.sendMessage(chatId, result.message);
+            }
+            return;
+        } catch (err) {
+            logger.error(`Error in admin OTP check:`, err.message);
+            await bot.deleteMessage(chatId, checkingMsg.message_id);
+            await bot.sendMessage(chatId, `❌ Error: ${err.message}`);
+            return;
+        }
+    }
+    
+    // Regular user - check ownership
+    let ownerId = state.numberOwners[phoneNumber];
+    
+    if (!ownerId) {
+        return bot.sendMessage(chatId, "❌ This number is not assigned to any user. Use '📱 Get Number' to get a number.");
+    }
+    
+    if (ownerId !== userId) {
+        return bot.sendMessage(chatId, "❌ You don't own this number. It's assigned to another user.");
+    }
+    
+    const checkingMsg = await bot.sendMessage(chatId, "🔍 Checking for OTP... Please wait.");
+    
+    try {
+        const result = await otpWatcher.manualCheck(bot, userId, phoneNumber);
+        await bot.deleteMessage(chatId, checkingMsg.message_id);
+        
+        if (result.success) {
+            await bot.sendMessage(chatId, result.message);
+        } else {
+            await bot.sendMessage(chatId, result.message);
+        }
+    } catch (err) {
+        logger.error(`Error checking OTP for ${phoneNumber}:`, err.message);
+        await bot.deleteMessage(chatId, checkingMsg.message_id);
+        await bot.sendMessage(chatId, `❌ Error: ${err.message}`);
+    }
+}
+
+// ===== RUNTIME STATES =====
 
 async function handleRuntimeStates(bot, msg) {
     const chatId = msg.chat.id;
@@ -28,63 +119,86 @@ async function handleRuntimeStates(bot, msg) {
     const text = msg.text;
     const isAdmin = config.admins.includes(userId);
     
-    if (text === '/start' || text === '/cancel') {
-        state.runtime.waitingAddNumbers = null;
-        state.runtime.waitingBroadcast = null;
-        state.runtime.waitingChannelId = null;
-        state.runtime.waitingSingleStats = null;
-        state.runtime.waitingTestOtp = null;
-        state.runtime.waitingTestMessage = null;
-        state.runtime.waitingRemoveUserSingle = null;
-        state.runtime.addNumberBuffer = [];
-        saveState();
-        return false;
-    }
-    
-    if (text === '/done' && state.runtime.waitingAddNumbers === userId && isAdmin) {
-        const numbers = state.runtime.addNumberBuffer || [];
-        
-        if (numbers.length === 0) {
-            await bot.sendMessage(chatId, "❌ No numbers to add. Send numbers first.");
+    // ===== TOKEN ADDITION =====
+    if (state.runtime.waitingAddToken === userId && isAdmin) {
+        if (text === '/cancel') {
+            state.runtime.waitingAddToken = null;
+            saveState();
+            await bot.sendMessage(chatId, "❌ Token addition cancelled.");
+            await showAdminMenu(bot, chatId);
             return true;
         }
         
-        const validNumbers = numbers
-            .map(n => n.replace(/[^\d+]/g, ''))
-            .filter(n => n.length > 0)
-            .map(n => n.startsWith('+') ? n : '+' + n);
+        // Parse token format: ID|TOKEN
+        const parts = text.split('|');
+        if (parts.length === 2) {
+            const tokenId = parts[0].trim();
+            const token = parts[1].trim();
+            
+            if (tokenId && token) {
+                const success = otpWatcher.addToken(tokenId, token);
+                if (success) {
+                    await bot.sendMessage(chatId, `✅ Token ${tokenId} added/updated successfully!`);
+                    await showAdminMenu(bot, chatId);
+                } else {
+                    await bot.sendMessage(chatId, "❌ Failed to add token. Please try again.");
+                }
+            } else {
+                await bot.sendMessage(chatId, "❌ Invalid format. Use: ID|TOKEN");
+            }
+        } else {
+            await bot.sendMessage(chatId, "❌ Invalid format. Use: ID|TOKEN\nExample: 131669|KNqt1LUymTDaFyU6C5sKcPFq74NyL6N7SkbqYzHTee93457c");
+        }
         
-        const uniqueNumbers = [...new Set(validNumbers)];
-        
-        if (uniqueNumbers.length === 0) {
-            await bot.sendMessage(chatId, "❌ No valid numbers found.");
+        state.runtime.waitingAddToken = null;
+        saveState();
+        return true;
+    }
+    
+    // ===== ADD NUMBERS =====
+    if (state.runtime.waitingAddNumbers === userId && isAdmin) {
+        if (text === '/done') {
+            const numbers = state.runtime.addNumberBuffer || [];
+            
+            if (numbers.length === 0) {
+                await bot.sendMessage(chatId, "❌ No numbers to add. Send numbers first.");
+                return true;
+            }
+            
+            const validNumbers = numbers
+                .map(n => n.replace(/[^\d+]/g, ''))
+                .filter(n => n.length > 0)
+                .map(n => n.startsWith('+') ? n : '+' + n);
+            
+            const uniqueNumbers = [...new Set(validNumbers)];
+            
+            if (uniqueNumbers.length === 0) {
+                await bot.sendMessage(chatId, "❌ No valid numbers found.");
+                state.runtime.addNumberBuffer = [];
+                state.runtime.waitingAddNumbers = null;
+                saveState();
+                return true;
+            }
+            
+            state.availableNumbers.push(...uniqueNumbers);
             state.runtime.addNumberBuffer = [];
             state.runtime.waitingAddNumbers = null;
             saveState();
+            
+            await bot.sendMessage(chatId, `✅ Added ${uniqueNumbers.length} number(s) successfully!`);
+            await showAdminMenu(bot, chatId);
             return true;
         }
         
-        state.availableNumbers.push(...uniqueNumbers);
-        state.runtime.addNumberBuffer = [];
-        state.runtime.waitingAddNumbers = null;
-        saveState();
+        if (text === '/cancel') {
+            state.runtime.addNumberBuffer = [];
+            state.runtime.waitingAddNumbers = null;
+            saveState();
+            await bot.sendMessage(chatId, "❌ Number addition cancelled.");
+            await showAdminMenu(bot, chatId);
+            return true;
+        }
         
-        await bot.sendMessage(chatId, `✅ Added ${uniqueNumbers.length} number(s) successfully!`);
-        await showAdminMenu(bot, chatId);
-        return true;
-    }
-    
-    if (state.runtime.waitingChannelId === userId && isAdmin) {
-        state.settings.withdrawChannelId = text.trim();
-        state.runtime.waitingChannelId = null;
-        saveState();
-        
-        await bot.sendMessage(chatId, `✅ Channel ID set to: ${text.trim()}`);
-        await showAdminMenu(bot, chatId);
-        return true;
-    }
-    
-    if (state.runtime.waitingAddNumbers === userId && isAdmin) {
         const numbers = text.split("\n").map(n => n.trim()).filter(n => n.length > 0);
         
         if (numbers.length === 0) {
@@ -107,6 +221,18 @@ async function handleRuntimeStates(bot, msg) {
         return true;
     }
     
+    // ===== CHANNEL ID =====
+    if (state.runtime.waitingChannelId === userId && isAdmin) {
+        state.settings.withdrawChannelId = text.trim();
+        state.runtime.waitingChannelId = null;
+        saveState();
+        
+        await bot.sendMessage(chatId, `✅ Channel ID set to: ${text.trim()}`);
+        await showAdminMenu(bot, chatId);
+        return true;
+    }
+    
+    // ===== BROADCAST =====
     if (state.runtime.waitingBroadcast === userId && isAdmin) {
         const userCount = Object.keys(state.users).length;
         let sent = 0;
@@ -128,6 +254,7 @@ async function handleRuntimeStates(bot, msg) {
         return true;
     }
     
+    // ===== TEST MESSAGE =====
     if (state.runtime.waitingTestMessage === userId && isAdmin) {
         const parts = text.split('|');
         if (parts.length === 2) {
@@ -149,8 +276,25 @@ async function handleRuntimeStates(bot, msg) {
         return true;
     }
     
+    // ===== CANCEL ALL =====
+    if (text === '/start' || text === '/cancel') {
+        state.runtime.waitingAddNumbers = null;
+        state.runtime.waitingBroadcast = null;
+        state.runtime.waitingChannelId = null;
+        state.runtime.waitingSingleStats = null;
+        state.runtime.waitingTestOtp = null;
+        state.runtime.waitingTestMessage = null;
+        state.runtime.waitingRemoveUserSingle = null;
+        state.runtime.waitingAddToken = null;
+        state.runtime.addNumberBuffer = [];
+        saveState();
+        return false;
+    }
+    
     return false;
 }
+
+// ===== MENU COMMANDS =====
 
 async function handleMenuCommands(bot, msg) {
     const chatId = msg.chat.id;
@@ -163,6 +307,7 @@ async function handleMenuCommands(bot, msg) {
         return bot.sendMessage(chatId, "⚠️ Please send a join request first.");
     }
     
+    // User commands
     switch (text) {
         case "📱 Get Number":
             await handleGetNumber(bot, chatId, userId);
@@ -178,36 +323,50 @@ async function handleMenuCommands(bot, msg) {
             break;
     }
     
+    // Admin commands
     if (isAdmin) {
         switch (text) {
             case "➕ Add Number":
                 state.runtime.waitingAddNumbers = userId;
                 state.runtime.addNumberBuffer = [];
                 saveState();
-                await bot.sendMessage(chatId, "📱 Send phone numbers (one per line).\nType /done when finished.");
+                await bot.sendMessage(
+                    chatId, 
+                    "📱 Send phone numbers (one per line).\n" +
+                    "Example: +992123456789\n" +
+                    "Type /done when finished.\n" +
+                    "Type /cancel to cancel."
+                );
                 break;
+                
             case "📊 Stats":
                 await handleStats(bot, chatId);
                 break;
+                
             case "👥 Remove User":
                 await handleRemoveUser(bot, chatId);
                 break;
+                
             case "📋 Pending List":
                 await handlePendingList(bot, chatId, 0);
                 break;
+                
             case "👤 User Stats":
                 await handleUserStatsList(bot, chatId, 0);
                 break;
+                
             case "📢 Broadcast":
                 state.runtime.waitingBroadcast = userId;
                 saveState();
                 await bot.sendMessage(chatId, "📨 Send the broadcast message:");
                 break;
+                
             case "🗑️ Erase Number":
                 state.availableNumbers = [];
                 saveState();
                 await bot.sendMessage(chatId, "✅ All available numbers have been erased.");
                 break;
+                
             case "🧹 Erase Assigned":
                 const totalAssigned = Object.keys(state.assignedNumbers).reduce((sum, id) => sum + state.assignedNumbers[id].length, 0);
                 state.assignedNumbers = {};
@@ -215,37 +374,45 @@ async function handleMenuCommands(bot, msg) {
                 saveState();
                 await bot.sendMessage(chatId, `✅ All assigned numbers (${totalAssigned}) have been erased.`);
                 break;
+                
             case "📊 Clear User Stats":
                 state.userStats = {};
                 saveState();
                 await bot.sendMessage(chatId, "✅ All user statistics have been cleared.");
                 break;
+                
             case "🧹 Clear Single Stats":
                 await handleClearSingleStats(bot, chatId);
                 break;
+                
             case "⚙️ On/Off":
                 state.settings.botEnabled = !state.settings.botEnabled;
                 saveState();
                 const status = state.settings.botEnabled ? "🟢 Online" : "🔴 Offline";
                 await bot.sendMessage(chatId, `✅ Bot is now ${status}`);
                 break;
+                
             case "💰 Withdraw On/Off":
                 state.settings.withdrawEnabled = !state.settings.withdrawEnabled;
                 saveState();
                 const wStatus = state.settings.withdrawEnabled ? "🟢 Enabled" : "🔴 Disabled";
                 await bot.sendMessage(chatId, `✅ Withdraw is now ${wStatus}`);
                 break;
+                
             case "📡 Set Channel ID":
                 state.runtime.waitingChannelId = userId;
                 saveState();
                 await bot.sendMessage(chatId, "📡 Send the channel ID (e.g., -1001234567890)\nType /cancel to cancel.");
                 break;
+                
             case "📡 API Status":
                 await handleApiStatus(bot, chatId);
                 break;
-            case "🔑 Token Status":
-                await handleTokenStatus(bot, chatId);
+                
+            case "🔑 Manage Tokens":
+                await handleManageTokens(bot, chatId);
                 break;
+                
             case "🔄 Rotate Token":
                 const rotated = otpWatcher.rotateToken();
                 if (rotated) {
@@ -255,6 +422,11 @@ async function handleMenuCommands(bot, msg) {
                 }
                 await showAdminMenu(bot, chatId);
                 break;
+                
+            case "🔄 Sync Numbers":
+                await handleSyncNumbers(bot, chatId);
+                break;
+                
             case "🧹 Clean Orphans":
                 const cleaned = cleanupOrphanedNumbers();
                 saveState();
@@ -262,11 +434,13 @@ async function handleMenuCommands(bot, msg) {
                 await bot.sendMessage(chatId, msg);
                 await showAdminMenu(bot, chatId);
                 break;
+                
             case "🔍 Test Message":
                 state.runtime.waitingTestMessage = userId;
                 saveState();
                 await bot.sendMessage(chatId, "📨 Send the user ID and message:\nFormat: USER_ID|MESSAGE");
                 break;
+                
             case "🔄 Reset":
                 state.assignedNumbers = {};
                 state.numberOwners = {};
@@ -283,6 +457,7 @@ async function handleMenuCommands(bot, msg) {
                     waitingSingleStats: null,
                     waitingTestOtp: null,
                     waitingTestMessage: null,
+                    waitingAddToken: null,
                     selectedUsersForRemoval: [],
                     addNumberBuffer: [],
                     activeToken: 0,
@@ -470,17 +645,17 @@ async function handleStats(bot, chatId) {
 }
 
 async function handleUserStatsList(bot, chatId, page) {
-    const users = Object.keys(state.users);
+    const allUsers = Object.keys(state.users);
     
-    if (users.length === 0) {
+    if (allUsers.length === 0) {
         return bot.sendMessage(chatId, "❌ No users found.");
     }
     
     const perPage = 10;
-    const totalPages = Math.ceil(users.length / perPage);
+    const totalPages = Math.ceil(allUsers.length / perPage);
     const start = page * perPage;
-    const end = Math.min(start + perPage, users.length);
-    const pageUsers = users.slice(start, end);
+    const end = Math.min(start + perPage, allUsers.length);
+    const pageUsers = allUsers.slice(start, end);
     
     let message = `📊 *User Stats* (Page ${page + 1}/${totalPages})\n\n`;
     
@@ -488,11 +663,16 @@ async function handleUserStatsList(bot, chatId, page) {
         const user = state.users[userId];
         const stats = state.userStats[userId] || { assigned: 0, successOtp: 0, noOtp: 0, withdrawCount: 0 };
         const assignedNumbers = state.assignedNumbers[userId] || [];
+        const isAdmin = config.admins.includes(userId);
         
-        message += `👤 *${user.profileName || "Unknown"}*\n`;
+        message += `👤 *${user.profileName || "Unknown"}*`;
+        if (isAdmin) message += ` 👑 Admin`;
+        message += `\n`;
         message += `🆔 ID: \`${userId}\`\n`;
         message += `📋 Assigned: ${assignedNumbers.length}\n`;
-        message += `✅ OTPs: ${stats.successOtp || 0}\n\n`;
+        message += `✅ OTPs: ${stats.successOtp || 0}\n`;
+        message += `❌ No OTPs: ${stats.noOtp || 0}\n`;
+        message += `💰 Withdrawals: ${stats.withdrawCount || 0}\n\n`;
     }
     
     const keyboard = {
@@ -752,46 +932,180 @@ async function handleApiStatus(bot, chatId) {
         const status = await otpWatcher.getApiStatus();
         
         let message = `📊 *API Status*\n\n`;
-        message += `Status: ${status.status === 'online' ? '🟢 Online' : '🔴 Offline'}\n`;
-        if (status.status === 'online') {
-            message += `📋 Total Records Today: ${status.total || 0}\n`;
-            message += `📄 Last Page: ${status.lastPage || 1}\n`;
+        
+        if (status.overallStatus === 'online') {
+            message += `🟢 *Online* - API is working\n`;
         } else {
-            message += `❌ Error: ${status.error || status.message || 'Unknown'}\n`;
+            message += `🔴 *Offline* - No active tokens available\n`;
         }
         
-        await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-    } catch (err) {
-        await bot.sendMessage(chatId, `❌ Failed to get API status: ${err.message}`);
-    }
-}
-
-async function handleTokenStatus(bot, chatId) {
-    try {
-        const status = await otpWatcher.getApiStatus();
-        
-        let message = `🔑 *API Token Status*\n\n`;
-        message += `📊 Total Tokens: ${status.totalTokens}\n`;
-        message += `🟢 Active Tokens: ${status.activeTokens}\n`;
-        message += `🔴 Inactive Tokens: ${status.inactiveTokens}\n`;
-        message += `📋 Total Records: ${status.totalRecords}\n\n`;
-        message += `*Token Details:*\n`;
-        message += `━━━━━━━━━━━━━━━━━━━━━\n`;
+        message += `\n📋 *Token Details:*\n`;
+        message += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
         
         for (const token of status.tokenDetails) {
-            const statusIcon = token.active ? '🟢' : '🔴';
+            const statusIcon = token.active && !token.limited ? '🟢' : (token.active ? '🟡' : '🔴');
+            const statusText = token.active && !token.limited ? 'Active' : (token.active ? 'Limited' : 'Inactive');
+            
             message += `${statusIcon} *Token ${token.index}* (${token.id})\n`;
-            message += `   Status: ${token.active ? '✅ Active' : '❌ Inactive'}\n`;
+            message += `   Status: ${statusText}\n`;
             message += `   Errors: ${token.errorCount}\n`;
             message += `   Records: ${token.totalFetched}\n`;
+            message += `   Requests/min: ${token.requestsThisMinute}\n`;
             message += `   Last Success: ${token.lastSuccess}\n`;
             message += `━━━━━━━━━━━━━━━━━━━━━\n`;
         }
         
+        message += `\n📊 *Summary:*\n`;
+        message += `   Active Tokens: ${status.activeTokens}/${status.totalTokens}\n`;
+        message += `   Total Records: ${status.totalRecords}\n`;
+        
+        if (status.activeTokens === 0) {
+            message += `\n💡 *Tip:* No tokens are active. Use "🔑 Manage Tokens" to add tokens.`;
+        }
+        
         await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
     } catch (err) {
-        await bot.sendMessage(chatId, `❌ Failed to get token status: ${err.message}`);
+        logger.error("API Status error:", err.message);
+        await bot.sendMessage(chatId, `❌ Failed to get API status: ${err.message}`);
     }
+}
+
+async function handleManageTokens(bot, chatId) {
+    try {
+        const tokenStatus = otpWatcher.getTokenStatus();
+        
+        let message = `🔑 *Token Management*\n\n`;
+        
+        if (tokenStatus.length === 0) {
+            message += `No tokens configured.\n\n`;
+        } else {
+            message += `*Current Tokens:*\n`;
+            for (const token of tokenStatus) {
+                const statusIcon = token.active ? '🟢' : '🔴';
+                const statusText = token.active ? 'Active' : 'Invalid';
+                message += `${statusIcon} Token ${token.id}: ${statusText}\n`;
+                message += `   Errors: ${token.errorCount}\n`;
+                message += `   Last Checked: ${token.lastChecked}\n\n`;
+            }
+        }
+        
+        message += `\n*Available Actions:*\n`;
+        message += `➕ Add Token - Add or update a token\n`;
+        message += `🗑️ Remove Token - Remove a token\n`;
+        message += `🔄 Rotate Token - Switch to next token\n\n`;
+        message += `💡 When a token is invalid, you'll be notified automatically.`;
+        
+        const keyboard = {
+            inline_keyboard: [
+                [
+                    { text: "➕ Add Token", callback_data: "add_token" },
+                    { text: "🗑️ Remove Token", callback_data: "remove_token" }
+                ],
+                [
+                    { text: "🔄 Rotate Token", callback_data: "rotate_token" },
+                    { text: "📊 Token Status", callback_data: "token_status" }
+                ],
+                [
+                    { text: "❌ Close", callback_data: "close_tokens" }
+                ]
+            ]
+        };
+        
+        await bot.sendMessage(chatId, message, {
+            parse_mode: "Markdown",
+            reply_markup: keyboard
+        });
+        
+    } catch (err) {
+        logger.error("Manage tokens error:", err.message);
+        await bot.sendMessage(chatId, `❌ Error: ${err.message}`);
+    }
+}
+
+async function handleSyncNumbers(bot, chatId) {
+    const syncMsg = await bot.sendMessage(chatId, "🔄 Syncing numbers from all API tokens... Please wait.");
+    
+    try {
+        const allNumbers = [];
+        const tokens = config.api.tokens || [];
+        
+        for (let i = 0; i < tokens.length; i++) {
+            const tokenString = tokens[i];
+            const parts = tokenString.split('|');
+            const tokenId = parts[0] || `token_${i + 1}`;
+            const token = parts.slice(1).join('|') || tokenString;
+            
+            try {
+                const endDate = new Date();
+                const startDate = new Date();
+                startDate.setDate(startDate.getDate() - 7);
+                
+                const url = new URL(config.api.baseUrl);
+                url.searchParams.append('type', 'sms');
+                url.searchParams.append('stock_account', '0');
+                url.searchParams.append('perPage', '50');
+                url.searchParams.append('page', '1');
+                url.searchParams.append('sortColumn', 'created_at');
+                url.searchParams.append('sortDirection', 'desc');
+                url.searchParams.append('period[0]', startDate.toISOString());
+                url.searchParams.append('period[1]', endDate.toISOString());
+                
+                const response = await fetch(url.toString(), {
+                    headers: {
+                        'accept': 'application/json',
+                        'authorization': `Bearer ${token}`,
+                        'content-type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.data && data.data.length > 0) {
+                        const numbers = data.data.map(r => {
+                            let num = (r.b_number || r.number || r.phone || '').replace(/[^\d+]/g, '');
+                            if (!num.startsWith('+')) num = '+' + num;
+                            return num;
+                        });
+                        allNumbers.push(...numbers);
+                        await bot.sendMessage(chatId, `✅ Token ${tokenId}: found ${numbers.length} numbers`);
+                    }
+                }
+            } catch (err) {
+                await bot.sendMessage(chatId, `❌ Error in Token ${tokenId}: ${err.message}`);
+            }
+        }
+        
+        const uniqueNumbers = [...new Set(allNumbers)];
+        let added = 0;
+        
+        for (const number of uniqueNumbers) {
+            if (!state.availableNumbers.includes(number) && !state.numberOwners[number]) {
+                state.availableNumbers.push(number);
+                added++;
+            }
+        }
+        
+        if (added > 0) {
+            saveState();
+            await bot.sendMessage(chatId, `✅ Added ${added} new numbers to available pool!\n📊 Total available: ${state.availableNumbers.length}`);
+        } else {
+            await bot.sendMessage(chatId, `ℹ️ No new numbers to add. All ${uniqueNumbers.length} numbers already exist.`);
+        }
+        
+        const summary = 
+            `📊 *Sync Summary*\n\n` +
+            `Total numbers in API: ${uniqueNumbers.length}\n` +
+            `Available numbers in bot: ${state.availableNumbers.length}\n` +
+            `Assigned numbers: ${Object.keys(state.numberOwners).length}\n` +
+            `Total users: ${Object.keys(state.users).length}`;
+        
+        await bot.sendMessage(chatId, summary, { parse_mode: "Markdown" });
+        
+    } catch (err) {
+        await bot.sendMessage(chatId, `❌ Sync failed: ${err.message}`);
+    }
+    
+    await bot.deleteMessage(chatId, syncMsg.message_id);
 }
 
 async function showAdminMenu(bot, chatId) {
@@ -803,9 +1117,10 @@ async function showAdminMenu(bot, chatId) {
         ["🧹 Erase Assigned", "📊 Clear User Stats"],
         ["🧹 Clear Single Stats", "⚙️ On/Off"],
         ["💰 Withdraw On/Off", "📡 Set Channel ID"],
-        ["📡 API Status", "🔑 Token Status"],
-        ["🔄 Rotate Token", "🔄 Reset"],
-        ["🧹 Clean Orphans", "🔍 Test Message"]
+        ["📡 API Status", "🔑 Manage Tokens"],
+        ["🔄 Rotate Token", "🔄 Sync Numbers"],
+        ["🔄 Reset", "🧹 Clean Orphans"],
+        ["🔍 Test Message"]
     ];
     
     await bot.sendMessage(chatId, "🔧 Admin Menu", {
@@ -816,7 +1131,7 @@ async function showAdminMenu(bot, chatId) {
     });
 }
 
-// Export helper functions for callback.js
+// ===== EXPORT HELPER FUNCTIONS =====
 module.exports.showUserListForRemoval = showUserListForRemoval;
 module.exports.showUserListForStats = showUserListForStats;
 module.exports.handlePendingList = handlePendingList;

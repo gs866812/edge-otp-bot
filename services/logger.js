@@ -9,7 +9,6 @@ function log(message, type = "INFO") {
     
     console.log(logEntry.trim());
     
-    // Append to file
     try {
         fs.appendFileSync(LOG_FILE, logEntry);
     } catch (err) {

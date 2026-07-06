@@ -11,9 +11,10 @@ function getMenuKeyboard(isAdmin) {
             ["🧹 Erase Assigned", "📊 Clear User Stats"],
             ["🧹 Clear Single Stats", "⚙️ On/Off"],
             ["💰 Withdraw On/Off", "📡 Set Channel ID"],
-            ["📡 API Status", "🔑 Token Status"],
-            ["🔄 Rotate Token", "🔄 Reset"],
-            ["🧹 Clean Orphans", "🔍 Test Message"]
+            ["📡 API Status", "🔑 Manage Tokens"],  // Updated
+            ["🔄 Rotate Token", "🔄 Sync Numbers"],
+            ["🔄 Reset", "🧹 Clean Orphans"],
+            ["🔍 Test Message"]
         ];
     } else {
         return [
@@ -32,6 +33,20 @@ module.exports = function(bot) {
         
         if (!state.settings.botEnabled && !isAdmin) {
             return bot.sendMessage(chatId, "⚠️ Bot is currently disabled. Please try again later.");
+        }
+        
+        // Add admin to users list if not already
+        if (isAdmin && !state.users[userId]) {
+            state.users[userId] = {
+                id: userId,
+                profileName: user.first_name || "Admin",
+                username: user.username || "",
+                joinedAt: Date.now()
+            };
+            if (!state.userStats[userId]) {
+                state.userStats[userId] = { assigned: 0, successOtp: 0, noOtp: 0, withdrawCount: 0 };
+            }
+            saveState();
         }
         
         const isApproved = state.users[userId] !== undefined;

@@ -15,6 +15,12 @@ const defaultState = {
         withdrawEnabled: true,
         withdrawChannelId: ""
     },
+    // ===== NEW: Token Management =====
+    tokens: {
+        list: [], // Array of {id, token, active, lastChecked, errorCount}
+        lastUpdate: null,
+        autoDisableOnInvalid: true
+    },
     runtime: {
         waitingAddNumbers: null,
         waitingBroadcast: null,
@@ -24,6 +30,10 @@ const defaultState = {
         waitingSingleStats: null,
         waitingTestOtp: null,
         waitingTestMessage: null,
+        // ===== NEW: Token management states =====
+        waitingAddToken: null,
+        waitingRemoveToken: null,
+        waitingUpdateToken: null,
         selectedUsersForRemoval: [],
         addNumberBuffer: [],
         activeToken: 0,
@@ -61,34 +71,24 @@ function saveState() {
 function cleanupOrphanedNumbers() {
     let cleaned = 0;
     
-    // Get all numbers that have owners
     const numbersWithOwners = Object.keys(state.numberOwners);
-    
     for (const number of numbersWithOwners) {
         const ownerId = state.numberOwners[number];
-        
-        // Check if the owner exists in users list
         if (!state.users[ownerId]) {
-            // Owner doesn't exist, remove the number
             delete state.numberOwners[number];
-            
-            // Also remove from assignedNumbers if present
             if (state.assignedNumbers[ownerId]) {
                 state.assignedNumbers[ownerId] = state.assignedNumbers[ownerId].filter(n => n !== number);
                 if (state.assignedNumbers[ownerId].length === 0) {
                     delete state.assignedNumbers[ownerId];
                 }
             }
-            
             cleaned++;
         }
     }
     
-    // Also clean assignedNumbers for non-existent users
     const assignedUsers = Object.keys(state.assignedNumbers);
     for (const userId of assignedUsers) {
         if (!state.users[userId] && !state.pendingUsers[userId]) {
-            // User doesn't exist in either active or pending users
             const numbers = state.assignedNumbers[userId] || [];
             for (const number of numbers) {
                 delete state.numberOwners[number];
