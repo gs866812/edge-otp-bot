@@ -21,6 +21,8 @@ const defaultState = {
         lastUpdate: null,
         autoDisableOnInvalid: true
     },
+    // ===== NEW: Rate Limit Tracking =====
+    lastGetNumber: {}, // userId -> timestamp
     runtime: {
         waitingAddNumbers: null,
         waitingBroadcast: null,
@@ -58,6 +60,11 @@ function loadState() {
         }
         const raw = fs.readFileSync(STATE_FILE, "utf8");
         state = { ...defaultState, ...JSON.parse(raw) };
+        
+        // Ensure lastGetNumber exists
+        if (!state.lastGetNumber) {
+            state.lastGetNumber = {};
+        }
     } catch (err) {
         console.log("State load error:", err.message);
         state = JSON.parse(JSON.stringify(defaultState));

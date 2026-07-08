@@ -3,6 +3,9 @@ const config = require("../config");
 const logger = require("../services/logger");
 const otpWatcher = require("../services/otpWatcher");
 
+// ===== RATE LIMIT CONFIGURATION =====
+const RATE_LIMIT_SECONDS = 15; // 15 seconds wait time
+
 module.exports = function(bot) {
     bot.on("message", async (msg) => {
         const chatId = msg.chat.id;
@@ -442,12 +445,15 @@ async function handleMenuCommands(bot, msg) {
                 break;
                 
             case "🔄 Reset":
+                // ===== FIX: Keep channel ID during reset =====
+                const keepChannelId = state.settings.withdrawChannelId; // Save channel ID
                 state.assignedNumbers = {};
                 state.numberOwners = {};
                 state.userStats = {};
                 state.availableNumbers = [];
                 state.lastOtpByNumber = {};
                 state.lastProcessedMessage = {};
+                state.lastGetNumber = {}; // Clear rate limit tracking
                 state.runtime = {
                     waitingAddNumbers: null,
                     waitingBroadcast: null,
@@ -465,8 +471,9 @@ async function handleMenuCommands(bot, msg) {
                     otpAttempts: {},
                     lastOtpCheck: {}
                 };
+                state.settings.withdrawChannelId = keepChannelId; // Restore channel ID
                 saveState();
-                await bot.sendMessage(chatId, "✅ Bot has been reset successfully!\nUsers and pending users preserved.");
+                await bot.sendMessage(chatId, "✅ Bot has been reset successfully!\nUsers, pending users, and channel ID preserved.");
                 break;
         }
     }
@@ -475,10 +482,28 @@ async function handleMenuCommands(bot, msg) {
 // ===== USER COMMAND HANDLERS =====
 
 async function handleGetNumber(bot, chatId, userId) {
+    // ===== RATE LIMIT CHECK =====
+    const now = Date.now();
+    const lastRequest = state.lastGetNumber[userId] || 0;
+    const timeDiff = (now - lastRequest) / 1000; // Convert to seconds
+    
+    if (timeDiff < RATE_LIMIT_SECONDS && !config.admins.includes(userId)) {
+        const remaining = Math.ceil(RATE_LIMIT_SECONDS - timeDiff);
+        return bot.sendMessage(
+            chatId, 
+            `⏳ *Too early request!*\n\n` +
+            `Please wait *${remaining} seconds* before requesting another number.\n\n` +
+            `📱 You can get a new number after ${remaining}s.`,
+            { parse_mode: "Markdown" }
+        );
+    }
+    
+    // ===== CHECK AVAILABLE NUMBERS =====
     if (state.availableNumbers.length === 0) {
         return bot.sendMessage(chatId, "❌ No numbers available at the moment.");
     }
     
+    // ===== ASSIGN NUMBER =====
     const number = state.availableNumbers.shift();
     const assigned = state.assignedNumbers[userId] || [];
     state.assignedNumbers[userId] = [...assigned, number];
@@ -488,6 +513,9 @@ async function handleGetNumber(bot, chatId, userId) {
         state.userStats[userId] = { assigned: 0, successOtp: 0, noOtp: 0, withdrawCount: 0 };
     }
     state.userStats[userId].assigned += 1;
+    
+    // ===== UPDATE LAST REQUEST TIME =====
+    state.lastGetNumber[userId] = Date.now();
     
     saveState();
     

@@ -21,19 +21,72 @@
       "status": "pending"
     }
   },
-  "availableNumbers": [],
-  "assignedNumbers": {},
-  "numberOwners": {},
-  "userStats": {},
+  "availableNumbers": [
+    "+3725039871",
+    "+3725039872",
+    "+3725039876",
+    "+3725039877",
+    "+3725039878",
+    "+3725039879",
+    "+3725039888",
+    "+3725039893",
+    "+3725039895",
+    "+3725039900",
+    "+3725039902",
+    "+3725039909",
+    "+3725039910",
+    "+3725039913",
+    "+3725039916",
+    "+3725039917",
+    "+3725039918",
+    "+3725039919",
+    "+3725039921",
+    "+3725039925",
+    "+3725039927",
+    "+3725039928",
+    "+3725039930",
+    "+3725039932",
+    "+3725039933",
+    "+3725039935",
+    "+3725039937",
+    "+3725039940",
+    "+3725039941",
+    "+3725039942",
+    "+3725039946",
+    "+3725039952",
+    "+3725039955",
+    "+3725039956"
+  ],
+  "assignedNumbers": {
+    "7598185964": [
+      "+3725039869",
+      "+3725039870"
+    ]
+  },
+  "numberOwners": {
+    "+3725039869": "7598185964",
+    "+3725039870": "7598185964"
+  },
+  "userStats": {
+    "7598185964": {
+      "assigned": 2,
+      "successOtp": 0,
+      "noOtp": 0,
+      "withdrawCount": 0
+    }
+  },
   "settings": {
     "botEnabled": true,
-    "withdrawEnabled": false,
-    "withdrawChannelId": ""
+    "withdrawEnabled": true,
+    "withdrawChannelId": "-1004422385704"
   },
   "tokens": {
     "list": [],
     "lastUpdate": null,
     "autoDisableOnInvalid": true
+  },
+  "lastGetNumber": {
+    "7598185964": 1783514084382
   },
   "runtime": {
     "waitingAddNumbers": null,
@@ -44,13 +97,13 @@
     "waitingSingleStats": null,
     "waitingTestOtp": null,
     "waitingTestMessage": null,
+    "waitingAddToken": null,
     "selectedUsersForRemoval": [],
     "addNumberBuffer": [],
     "activeToken": 0,
     "lastFetch": null,
     "otpAttempts": {},
-    "lastOtpCheck": {},
-    "waitingAddToken": null
+    "lastOtpCheck": {}
   },
   "lastOtpByNumber": {},
   "processedMessages": {},
