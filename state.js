@@ -41,7 +41,9 @@ const defaultState = {
         activeToken: 0,
         lastFetch: null,
         otpAttempts: {},
-        lastOtpCheck: {}
+        lastOtpCheck: {},
+        waitingConfirmation: false,
+        pendingAction: null,
     },
     lastOtpByNumber: {},
     processedMessages: {},
@@ -60,7 +62,7 @@ function loadState() {
         }
         const raw = fs.readFileSync(STATE_FILE, "utf8");
         state = { ...defaultState, ...JSON.parse(raw) };
-        
+
         // Ensure lastGetNumber exists
         if (!state.lastGetNumber) {
             state.lastGetNumber = {};
@@ -77,7 +79,7 @@ function saveState() {
 
 function cleanupOrphanedNumbers() {
     let cleaned = 0;
-    
+
     const numbersWithOwners = Object.keys(state.numberOwners);
     for (const number of numbersWithOwners) {
         const ownerId = state.numberOwners[number];
@@ -92,7 +94,7 @@ function cleanupOrphanedNumbers() {
             cleaned++;
         }
     }
-    
+
     const assignedUsers = Object.keys(state.assignedNumbers);
     for (const userId of assignedUsers) {
         if (!state.users[userId] && !state.pendingUsers[userId]) {
@@ -104,15 +106,15 @@ function cleanupOrphanedNumbers() {
             cleaned += numbers.length;
         }
     }
-    
+
     return cleaned;
 }
 
 loadState();
 
-module.exports = { 
-    state, 
-    saveState, 
+module.exports = {
+    state,
+    saveState,
     loadState,
-    cleanupOrphanedNumbers 
+    cleanupOrphanedNumbers
 };

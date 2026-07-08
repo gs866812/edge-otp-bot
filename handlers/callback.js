@@ -1,6 +1,7 @@
 const { state, saveState } = require("../state");
 const config = require("../config");
 const logger = require("../services/logger");
+const otpWatcher = require("../services/otpWatcher");
 
 const {
     showUserListForRemoval,
@@ -8,6 +9,43 @@ const {
     handlePendingList,
     handleUserStatsList
 } = require("./message");
+
+// ===== REMOVE TOKEN HANDLER =====
+async function handleRemoveToken(bot, chatId) {
+    try {
+        const tokenStatus = otpWatcher.getTokenStatus();
+        
+        if (tokenStatus.length === 0) {
+            await bot.sendMessage(chatId, "❌ No tokens to remove.");
+            return;
+        }
+        
+        let message = `🗑️ *Remove Token*\n\nSelect a token to remove:\n\n`;
+        
+        const keyboard = {
+            inline_keyboard: []
+        };
+        
+        for (const token of tokenStatus) {
+            const statusIcon = token.active ? '🟢' : '🔴';
+            keyboard.inline_keyboard.push([
+                { text: `${statusIcon} Token ${token.id}`, callback_data: `remove_token_${token.id}` }
+            ]);
+        }
+        
+        keyboard.inline_keyboard.push([
+            { text: "❌ Cancel", callback_data: "close_tokens" }
+        ]);
+        
+        await bot.sendMessage(chatId, message, {
+            parse_mode: "Markdown",
+            reply_markup: keyboard
+        });
+    } catch (err) {
+        logger.error("Remove token error:", err.message);
+        await bot.sendMessage(chatId, `❌ Error: ${err.message}`);
+    }
+}
 
 module.exports = function (bot) {
     bot.on("callback_query", async (query) => {
@@ -20,6 +58,251 @@ module.exports = function (bot) {
 
             const isAdmin = config.admins.includes(userId);
 
+            // ===== BROADCAST CONFIRMATION =====
+            if (data === "confirm_broadcast") {
+                if (!isAdmin) {
+                    await bot.sendMessage(chatId, "❌ Only admins can send broadcasts.");
+                    return;
+                }
+                
+                const broadcastMsg = state.runtime.broadcastMessage;
+                const userCount = state.runtime.broadcastUserCount || Object.keys(state.users).length;
+                
+                if (!broadcastMsg) {
+                    await bot.editMessageText(
+                        "❌ No broadcast message found.",
+                        {
+                            chat_id: chatId,
+                            message_id: query.message.message_id
+                        }
+                    );
+                    return;
+                }
+                
+                let sent = 0;
+                for (const uid of Object.keys(state.users)) {
+                    try {
+                        await bot.sendMessage(uid, `📢 ${broadcastMsg}`);
+                        sent++;
+                    } catch (err) {
+                        logger.error(`Failed to send broadcast to ${uid}:`, err.message);
+                    }
+                }
+                
+                state.runtime.broadcastMessage = null;
+                state.runtime.broadcastUserCount = null;
+                state.runtime.waitingBroadcast = null;
+                saveState();
+                
+                await bot.editMessageText(
+                    `✅ Broadcast sent to ${sent}/${userCount} users!`,
+                    {
+                        chat_id: chatId,
+                        message_id: query.message.message_id
+                    }
+                );
+                return;
+            }
+            
+            if (data === "cancel_broadcast") {
+                if (!isAdmin) {
+                    await bot.sendMessage(chatId, "❌ Only admins can cancel broadcasts.");
+                    return;
+                }
+                
+                state.runtime.broadcastMessage = null;
+                state.runtime.broadcastUserCount = null;
+                state.runtime.waitingBroadcast = null;
+                saveState();
+                
+                await bot.editMessageText(
+                    "❌ Broadcast cancelled.",
+                    {
+                        chat_id: chatId,
+                        message_id: query.message.message_id
+                    }
+                );
+                return;
+            }
+
+            // ===== CONFIRM: ERASE NUMBER =====
+            if (data === "confirm_erase_number") {
+                if (!isAdmin) {
+                    await bot.sendMessage(chatId, "❌ Only admins can perform this action.");
+                    return;
+                }
+                state.availableNumbers = [];
+                saveState();
+                await bot.editMessageText(
+                    "✅ All available numbers have been erased.",
+                    {
+                        chat_id: chatId,
+                        message_id: query.message.message_id
+                    }
+                );
+                state.runtime.pendingAction = null;
+                saveState();
+                return;
+            }
+            
+            if (data === "cancel_erase_number") {
+                if (!isAdmin) {
+                    await bot.sendMessage(chatId, "❌ Only admins can cancel this action.");
+                    return;
+                }
+                await bot.editMessageText(
+                    "❌ Erase number cancelled.",
+                    {
+                        chat_id: chatId,
+                        message_id: query.message.message_id
+                    }
+                );
+                state.runtime.pendingAction = null;
+                saveState();
+                return;
+            }
+
+            // ===== CONFIRM: ERASE ASSIGNED =====
+            if (data === "confirm_erase_assigned") {
+                if (!isAdmin) {
+                    await bot.sendMessage(chatId, "❌ Only admins can perform this action.");
+                    return;
+                }
+                state.assignedNumbers = {};
+                state.numberOwners = {};
+                saveState();
+                await bot.editMessageText(
+                    "✅ All assigned numbers have been erased.",
+                    {
+                        chat_id: chatId,
+                        message_id: query.message.message_id
+                    }
+                );
+                state.runtime.pendingAction = null;
+                saveState();
+                return;
+            }
+            
+            if (data === "cancel_erase_assigned") {
+                if (!isAdmin) {
+                    await bot.sendMessage(chatId, "❌ Only admins can cancel this action.");
+                    return;
+                }
+                await bot.editMessageText(
+                    "❌ Erase assigned cancelled.",
+                    {
+                        chat_id: chatId,
+                        message_id: query.message.message_id
+                    }
+                );
+                state.runtime.pendingAction = null;
+                saveState();
+                return;
+            }
+
+            // ===== CONFIRM: CLEAR USER STATS =====
+            if (data === "confirm_clear_stats") {
+                if (!isAdmin) {
+                    await bot.sendMessage(chatId, "❌ Only admins can perform this action.");
+                    return;
+                }
+                state.userStats = {};
+                saveState();
+                await bot.editMessageText(
+                    "✅ All user statistics have been cleared.",
+                    {
+                        chat_id: chatId,
+                        message_id: query.message.message_id
+                    }
+                );
+                state.runtime.pendingAction = null;
+                saveState();
+                return;
+            }
+            
+            if (data === "cancel_clear_stats") {
+                if (!isAdmin) {
+                    await bot.sendMessage(chatId, "❌ Only admins can cancel this action.");
+                    return;
+                }
+                await bot.editMessageText(
+                    "❌ Clear stats cancelled.",
+                    {
+                        chat_id: chatId,
+                        message_id: query.message.message_id
+                    }
+                );
+                state.runtime.pendingAction = null;
+                saveState();
+                return;
+            }
+
+            // ===== CONFIRM: RESET ALL =====
+            if (data === "confirm_reset_all") {
+                if (!isAdmin) {
+                    await bot.sendMessage(chatId, "❌ Only admins can perform this action.");
+                    return;
+                }
+                const keepChannelId = state.settings.withdrawChannelId;
+                state.assignedNumbers = {};
+                state.numberOwners = {};
+                state.userStats = {};
+                state.availableNumbers = [];
+                state.lastOtpByNumber = {};
+                state.lastProcessedMessage = {};
+                state.lastGetNumber = {};
+                state.runtime = {
+                    waitingAddNumbers: null,
+                    waitingBroadcast: null,
+                    waitingChannelId: null,
+                    waitingRemoveUsers: null,
+                    waitingRemoveUserSingle: null,
+                    waitingSingleStats: null,
+                    waitingTestOtp: null,
+                    waitingTestMessage: null,
+                    waitingAddToken: null,
+                    selectedUsersForRemoval: [],
+                    addNumberBuffer: [],
+                    activeToken: 0,
+                    lastFetch: null,
+                    otpAttempts: {},
+                    lastOtpCheck: {},
+                    broadcastMessage: null,
+                    broadcastUserCount: null,
+                    pendingAction: null
+                };
+                state.settings.withdrawChannelId = keepChannelId;
+                saveState();
+                await bot.editMessageText(
+                    "✅ Bot has been reset successfully!\nUsers, pending users, and channel ID preserved.",
+                    {
+                        chat_id: chatId,
+                        message_id: query.message.message_id
+                    }
+                );
+                state.runtime.pendingAction = null;
+                saveState();
+                return;
+            }
+            
+            if (data === "cancel_reset_all") {
+                if (!isAdmin) {
+                    await bot.sendMessage(chatId, "❌ Only admins can cancel this action.");
+                    return;
+                }
+                await bot.editMessageText(
+                    "❌ Reset cancelled.",
+                    {
+                        chat_id: chatId,
+                        message_id: query.message.message_id
+                    }
+                );
+                state.runtime.pendingAction = null;
+                saveState();
+                return;
+            }
+
+            // ===== USER APPROVAL =====
             if (data.startsWith("approve_")) {
                 if (!isAdmin) {
                     await bot.sendMessage(chatId, "❌ Only admins can approve users.");
@@ -217,8 +500,8 @@ module.exports = function (bot) {
                 await bot.deleteMessage(chatId, query.message.message_id);
                 return;
             }
-            // In the callback handler, add:
 
+            // ===== TOKEN MANAGEMENT =====
             if (data === "add_token") {
                 state.runtime.waitingAddToken = userId;
                 saveState();
@@ -242,7 +525,7 @@ module.exports = function (bot) {
 
             if (data.startsWith("remove_token_")) {
                 const tokenId = data.replace("remove_token_", "");
-                const success = await otpWatcher.removeToken(tokenId);
+                const success = otpWatcher.removeToken(tokenId);
                 if (success) {
                     await bot.editMessageText(
                         `✅ Token ${tokenId} removed successfully!`,
@@ -264,7 +547,7 @@ module.exports = function (bot) {
             }
 
             if (data === "rotate_token") {
-                const rotated = await otpWatcher.rotateToken();
+                const rotated = otpWatcher.rotateToken();
                 if (rotated) {
                     await bot.sendMessage(chatId, `✅ Rotated to token ${rotated.id}`);
                 } else {
@@ -275,7 +558,7 @@ module.exports = function (bot) {
             }
 
             if (data === "token_status") {
-                const status = await otpWatcher.getTokenStatus();
+                const status = otpWatcher.getTokenStatus();
                 let message = `🔑 *Token Status*\n\n`;
                 for (const token of status) {
                     const statusIcon = token.active ? '🟢' : '🔴';

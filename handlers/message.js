@@ -6,29 +6,29 @@ const otpWatcher = require("../services/otpWatcher");
 // ===== RATE LIMIT CONFIGURATION =====
 const RATE_LIMIT_SECONDS = 15; // 15 seconds wait time
 
-module.exports = function(bot) {
+module.exports = function (bot) {
     bot.on("message", async (msg) => {
         const chatId = msg.chat.id;
         const userId = String(msg.from.id);
         const text = msg.text;
-        
+
         if (!text) return;
-        
+
         if (!state.settings.botEnabled && !config.admins.includes(userId)) {
             return bot.sendMessage(chatId, "⚠️ Bot is currently disabled. Please try again later.");
         }
-        
+
         // FIRST: Check if we're in a waiting state
         const handled = await handleRuntimeStates(bot, msg);
         if (handled) return;
-        
+
         // SECOND: Check if the message is a phone number
         const phoneNumber = extractPhoneNumber(text);
         if (phoneNumber) {
             await handlePhoneNumberMessage(bot, msg, phoneNumber);
             return;
         }
-        
+
         // THIRD: Handle menu commands
         await handleMenuCommands(bot, msg);
     });
@@ -41,7 +41,7 @@ function extractPhoneNumber(text) {
         /\+\d{10,15}/,
         /\d{10,15}/
     ];
-    
+
     for (const pattern of patterns) {
         const match = text.match(pattern);
         if (match) {
@@ -61,16 +61,16 @@ async function handlePhoneNumberMessage(bot, msg, phoneNumber) {
     const chatId = msg.chat.id;
     const userId = String(msg.from.id);
     const isAdmin = config.admins.includes(userId);
-    
+
     if (isAdmin) {
         logger.info(`Admin ${userId} checking OTP for number: ${phoneNumber}`);
-        
+
         const checkingMsg = await bot.sendMessage(chatId, "🔍 Checking for OTP... Please wait.");
-        
+
         try {
             const result = await otpWatcher.adminManualCheck(bot, userId, phoneNumber);
             await bot.deleteMessage(chatId, checkingMsg.message_id);
-            
+
             if (result.success) {
                 await bot.sendMessage(chatId, result.message);
             } else {
@@ -84,24 +84,23 @@ async function handlePhoneNumberMessage(bot, msg, phoneNumber) {
             return;
         }
     }
-    
-    // Regular user - check ownership
+
     let ownerId = state.numberOwners[phoneNumber];
-    
+
     if (!ownerId) {
         return bot.sendMessage(chatId, "❌ This number is not assigned to any user. Use '📱 Get Number' to get a number.");
     }
-    
+
     if (ownerId !== userId) {
         return bot.sendMessage(chatId, "❌ You don't own this number. It's assigned to another user.");
     }
-    
+
     const checkingMsg = await bot.sendMessage(chatId, "🔍 Checking for OTP... Please wait.");
-    
+
     try {
         const result = await otpWatcher.manualCheck(bot, userId, phoneNumber);
         await bot.deleteMessage(chatId, checkingMsg.message_id);
-        
+
         if (result.success) {
             await bot.sendMessage(chatId, result.message);
         } else {
@@ -121,7 +120,7 @@ async function handleRuntimeStates(bot, msg) {
     const userId = String(msg.from.id);
     const text = msg.text;
     const isAdmin = config.admins.includes(userId);
-    
+
     // ===== TOKEN ADDITION =====
     if (state.runtime.waitingAddToken === userId && isAdmin) {
         if (text === '/cancel') {
@@ -131,13 +130,12 @@ async function handleRuntimeStates(bot, msg) {
             await showAdminMenu(bot, chatId);
             return true;
         }
-        
-        // Parse token format: ID|TOKEN
+
         const parts = text.split('|');
         if (parts.length === 2) {
             const tokenId = parts[0].trim();
             const token = parts[1].trim();
-            
+
             if (tokenId && token) {
                 const success = otpWatcher.addToken(tokenId, token);
                 if (success) {
@@ -152,29 +150,29 @@ async function handleRuntimeStates(bot, msg) {
         } else {
             await bot.sendMessage(chatId, "❌ Invalid format. Use: ID|TOKEN\nExample: 131669|KNqt1LUymTDaFyU6C5sKcPFq74NyL6N7SkbqYzHTee93457c");
         }
-        
+
         state.runtime.waitingAddToken = null;
         saveState();
         return true;
     }
-    
+
     // ===== ADD NUMBERS =====
     if (state.runtime.waitingAddNumbers === userId && isAdmin) {
         if (text === '/done') {
             const numbers = state.runtime.addNumberBuffer || [];
-            
+
             if (numbers.length === 0) {
                 await bot.sendMessage(chatId, "❌ No numbers to add. Send numbers first.");
                 return true;
             }
-            
+
             const validNumbers = numbers
                 .map(n => n.replace(/[^\d+]/g, ''))
                 .filter(n => n.length > 0)
                 .map(n => n.startsWith('+') ? n : '+' + n);
-            
+
             const uniqueNumbers = [...new Set(validNumbers)];
-            
+
             if (uniqueNumbers.length === 0) {
                 await bot.sendMessage(chatId, "❌ No valid numbers found.");
                 state.runtime.addNumberBuffer = [];
@@ -182,17 +180,17 @@ async function handleRuntimeStates(bot, msg) {
                 saveState();
                 return true;
             }
-            
+
             state.availableNumbers.push(...uniqueNumbers);
             state.runtime.addNumberBuffer = [];
             state.runtime.waitingAddNumbers = null;
             saveState();
-            
+
             await bot.sendMessage(chatId, `✅ Added ${uniqueNumbers.length} number(s) successfully!`);
             await showAdminMenu(bot, chatId);
             return true;
         }
-        
+
         if (text === '/cancel') {
             state.runtime.addNumberBuffer = [];
             state.runtime.waitingAddNumbers = null;
@@ -201,69 +199,219 @@ async function handleRuntimeStates(bot, msg) {
             await showAdminMenu(bot, chatId);
             return true;
         }
-        
+
         const numbers = text.split("\n").map(n => n.trim()).filter(n => n.length > 0);
-        
+
         if (numbers.length === 0) {
             await bot.sendMessage(chatId, "❌ Please send valid phone numbers (one per line).\nType /done when finished.");
             return true;
         }
-        
+
         if (!state.runtime.addNumberBuffer) {
             state.runtime.addNumberBuffer = [];
         }
         state.runtime.addNumberBuffer.push(...numbers);
         saveState();
-        
+
         await bot.sendMessage(
-            chatId, 
+            chatId,
             `✅ Added ${numbers.length} number(s) to buffer.\n` +
             `Total in buffer: ${state.runtime.addNumberBuffer.length}\n` +
             `Continue adding or type /done to finish.`
         );
         return true;
     }
-    
+
     // ===== CHANNEL ID =====
     if (state.runtime.waitingChannelId === userId && isAdmin) {
         state.settings.withdrawChannelId = text.trim();
         state.runtime.waitingChannelId = null;
         saveState();
-        
+
         await bot.sendMessage(chatId, `✅ Channel ID set to: ${text.trim()}`);
         await showAdminMenu(bot, chatId);
         return true;
     }
-    
+
     // ===== BROADCAST =====
     if (state.runtime.waitingBroadcast === userId && isAdmin) {
-        const userCount = Object.keys(state.users).length;
-        let sent = 0;
-        
-        for (const uid of Object.keys(state.users)) {
-            try {
-                await bot.sendMessage(uid, `📢 ${text}`);
-                sent++;
-            } catch (err) {
-                logger.error(`Failed to send broadcast to ${uid}:`, err.message);
-            }
+        if (text === '/cancel') {
+            state.runtime.waitingBroadcast = null;
+            state.runtime.broadcastMessage = null;
+            state.runtime.broadcastUserCount = null;
+            saveState();
+            await bot.sendMessage(chatId, "❌ Broadcast cancelled.");
+            await showAdminMenu(bot, chatId);
+            return true;
         }
-        
-        state.runtime.waitingBroadcast = null;
+
+        if (text.startsWith('/')) {
+            await bot.sendMessage(chatId,
+                "❌ You are in broadcast mode. Please send a broadcast message or type /cancel to cancel."
+            );
+            return true;
+        }
+
+        const menuButtons = ["📊", "📋", "🌍", "👥", "⚙️", "📢", "🗑️", "🧹", "📡", "🔑", "🔄", "🔍"];
+        if (menuButtons.some(emoji => text.startsWith(emoji))) {
+            await bot.sendMessage(chatId,
+                "❌ You are in broadcast mode. Please send a broadcast message or type /cancel to cancel."
+            );
+            return true;
+        }
+
+        const broadcastMsg = text;
+        const userCount = Object.keys(state.users).length;
+
+        const preview =
+            `📢 *Broadcast Preview*\n\n` +
+            `📝 Message:\n${broadcastMsg}\n\n` +
+            `👥 Recipients: ${userCount} user(s)\n\n` +
+            `⚠️ This will send this message to ALL users.\n\n` +
+            `Type *confirm* to send, or *cancel* to abort.`;
+
+        state.runtime.broadcastMessage = broadcastMsg;
+        state.runtime.broadcastUserCount = userCount;
+        state.runtime.waitingBroadcastConfirm = userId;
         saveState();
-        
-        await bot.sendMessage(chatId, `✅ Broadcast sent to ${sent}/${userCount} users.`);
-        await showAdminMenu(bot, chatId);
+
+        await bot.sendMessage(chatId, preview, { parse_mode: "Markdown" });
         return true;
     }
-    
+
+    // ===== BROADCAST CONFIRMATION =====
+    if (state.runtime.waitingBroadcastConfirm === userId && isAdmin) {
+        if (text.toLowerCase() === "confirm") {
+            const broadcastMsg = state.runtime.broadcastMessage;
+            const userCount = state.runtime.broadcastUserCount || Object.keys(state.users).length;
+
+            if (!broadcastMsg) {
+                await bot.sendMessage(chatId, "❌ No broadcast message found.");
+                state.runtime.waitingBroadcastConfirm = null;
+                saveState();
+                return true;
+            }
+
+            let sent = 0;
+            for (const uid of Object.keys(state.users)) {
+                try {
+                    await bot.sendMessage(uid, `📢 ${broadcastMsg}`);
+                    sent++;
+                } catch (err) {
+                    logger.error(`Failed to send broadcast to ${uid}:`, err.message);
+                }
+            }
+
+            state.runtime.broadcastMessage = null;
+            state.runtime.broadcastUserCount = null;
+            state.runtime.waitingBroadcast = null;
+            state.runtime.waitingBroadcastConfirm = null;
+            saveState();
+
+            await bot.sendMessage(chatId, `✅ Broadcast sent to ${sent}/${userCount} users!`);
+            await showAdminMenu(bot, chatId);
+            return true;
+        } else if (text.toLowerCase() === "cancel") {
+            state.runtime.broadcastMessage = null;
+            state.runtime.broadcastUserCount = null;
+            state.runtime.waitingBroadcast = null;
+            state.runtime.waitingBroadcastConfirm = null;
+            saveState();
+            await bot.sendMessage(chatId, "❌ Broadcast cancelled.");
+            await showAdminMenu(bot, chatId);
+            return true;
+        } else {
+            await bot.sendMessage(chatId, "❌ Type *confirm* to send or *cancel* to abort.");
+            return true;
+        }
+    }
+
+    // ===== CONFIRMATION HANDLER =====
+    if (state.runtime.waitingConfirmation && isAdmin) {
+        const action = state.runtime.pendingAction;
+
+        if (text.toLowerCase() === "confirm") {
+            // Execute the action
+            switch (action) {
+                case "erase_number":
+                    state.availableNumbers = [];
+                    await bot.sendMessage(chatId, "✅ All available numbers have been erased.");
+                    break;
+                case "erase_assigned":
+                    state.assignedNumbers = {};
+                    state.numberOwners = {};
+                    await bot.sendMessage(chatId, "✅ All assigned numbers have been erased.");
+                    break;
+                case "clear_stats":
+                    state.userStats = {};
+                    await bot.sendMessage(chatId, "✅ All user statistics have been cleared.");
+                    break;
+                case "reset_all":
+                    const keepChannelId = state.settings.withdrawChannelId;
+                    state.assignedNumbers = {};
+                    state.numberOwners = {};
+                    state.userStats = {};
+                    state.availableNumbers = [];
+                    state.lastOtpByNumber = {};
+                    state.lastProcessedMessage = {};
+                    state.lastGetNumber = {};
+                    state.runtime = {
+                        waitingAddNumbers: null,
+                        waitingBroadcast: null,
+                        waitingChannelId: null,
+                        waitingRemoveUsers: null,
+                        waitingRemoveUserSingle: null,
+                        waitingSingleStats: null,
+                        waitingTestOtp: null,
+                        waitingTestMessage: null,
+                        waitingAddToken: null,
+                        selectedUsersForRemoval: [],
+                        addNumberBuffer: [],
+                        activeToken: 0,
+                        lastFetch: null,
+                        otpAttempts: {},
+                        lastOtpCheck: {},
+                        broadcastMessage: null,
+                        broadcastUserCount: null,
+                        waitingBroadcastConfirm: null,
+                        waitingConfirmation: false,
+                        pendingAction: null
+                    };
+                    state.settings.withdrawChannelId = keepChannelId;
+                    await bot.sendMessage(chatId, "✅ Bot has been reset successfully!\nUsers, pending users, and channel ID preserved.");
+                    break;
+                default:
+                    await bot.sendMessage(chatId, "❌ Unknown action.");
+            }
+
+            saveState();
+            state.runtime.waitingConfirmation = false;
+            state.runtime.pendingAction = null;
+            saveState();
+            await showAdminMenu(bot, chatId);
+            return true;
+
+        } else if (text.toLowerCase() === "cancel") {
+            state.runtime.waitingConfirmation = false;
+            state.runtime.pendingAction = null;
+            saveState();
+            await bot.sendMessage(chatId, "❌ Action cancelled.");
+            await showAdminMenu(bot, chatId);
+            return true;
+        } else {
+            // If user types something else, remind them
+            await bot.sendMessage(chatId, "❌ Type *confirm* to proceed or *cancel* to abort.", { parse_mode: "Markdown" });
+            return true;
+        }
+    }
+
     // ===== TEST MESSAGE =====
     if (state.runtime.waitingTestMessage === userId && isAdmin) {
         const parts = text.split('|');
         if (parts.length === 2) {
             const targetUserId = parts[0].trim();
             const testMessage = parts[1].trim();
-            
+
             try {
                 await bot.sendMessage(targetUserId, `🧪 Test Message: ${testMessage}`);
                 await bot.sendMessage(chatId, `✅ Test message sent to ${targetUserId}`);
@@ -278,7 +426,7 @@ async function handleRuntimeStates(bot, msg) {
         await showAdminMenu(bot, chatId);
         return true;
     }
-    
+
     // ===== CANCEL ALL =====
     if (text === '/start' || text === '/cancel') {
         state.runtime.waitingAddNumbers = null;
@@ -289,11 +437,16 @@ async function handleRuntimeStates(bot, msg) {
         state.runtime.waitingTestMessage = null;
         state.runtime.waitingRemoveUserSingle = null;
         state.runtime.waitingAddToken = null;
+        state.runtime.waitingConfirmation = null;
+        state.runtime.waitingBroadcastConfirm = null;
+        state.runtime.broadcastMessage = null;
+        state.runtime.broadcastUserCount = null;
+        state.runtime.pendingAction = null;
         state.runtime.addNumberBuffer = [];
         saveState();
         return false;
     }
-    
+
     return false;
 }
 
@@ -305,12 +458,11 @@ async function handleMenuCommands(bot, msg) {
     const text = msg.text;
     const isAdmin = config.admins.includes(userId);
     const isApproved = state.users[userId] !== undefined;
-    
+
     if (!isAdmin && !isApproved && text !== "📝 Join Request") {
         return bot.sendMessage(chatId, "⚠️ Please send a join request first.");
     }
-    
-    // User commands
+
     switch (text) {
         case "📱 Get Number":
             await handleGetNumber(bot, chatId, userId);
@@ -325,8 +477,7 @@ async function handleMenuCommands(bot, msg) {
             await handleWithdraw(bot, chatId, userId);
             break;
     }
-    
-    // Admin commands
+
     if (isAdmin) {
         switch (text) {
             case "➕ Add Number":
@@ -334,88 +485,98 @@ async function handleMenuCommands(bot, msg) {
                 state.runtime.addNumberBuffer = [];
                 saveState();
                 await bot.sendMessage(
-                    chatId, 
+                    chatId,
                     "📱 Send phone numbers (one per line).\n" +
                     "Example: +992123456789\n" +
                     "Type /done when finished.\n" +
                     "Type /cancel to cancel."
                 );
                 break;
-                
+
             case "📊 Stats":
                 await handleStats(bot, chatId);
                 break;
-                
+
             case "👥 Remove User":
                 await handleRemoveUser(bot, chatId);
                 break;
-                
+
             case "📋 Pending List":
                 await handlePendingList(bot, chatId, 0);
                 break;
-                
+
             case "👤 User Stats":
                 await handleUserStatsList(bot, chatId, 0);
                 break;
-                
+
             case "📢 Broadcast":
+                if (state.runtime.waitingBroadcast === userId) {
+                    await bot.sendMessage(chatId, "⏳ You are already in broadcast mode. Please send your message or type /cancel.");
+                    break;
+                }
                 state.runtime.waitingBroadcast = userId;
+                state.runtime.broadcastMessage = null;
+                state.runtime.broadcastUserCount = null;
                 saveState();
-                await bot.sendMessage(chatId, "📨 Send the broadcast message:");
+                await bot.sendMessage(chatId, "📨 Send the broadcast message:\n\nType /cancel to cancel.");
                 break;
-                
+
             case "🗑️ Erase Number":
-                state.availableNumbers = [];
-                saveState();
-                await bot.sendMessage(chatId, "✅ All available numbers have been erased.");
+                await showConfirmation(bot, chatId, "erase_number",
+                    "⚠️ *Confirm Erase Number*\n\n" +
+                    "This will delete ALL available numbers.\n\n" +
+                    "Type *confirm* to proceed, or *cancel* to abort."
+                );
                 break;
-                
+
             case "🧹 Erase Assigned":
-                const totalAssigned = Object.keys(state.assignedNumbers).reduce((sum, id) => sum + state.assignedNumbers[id].length, 0);
-                state.assignedNumbers = {};
-                state.numberOwners = {};
-                saveState();
-                await bot.sendMessage(chatId, `✅ All assigned numbers (${totalAssigned}) have been erased.`);
+                await showConfirmation(bot, chatId, "erase_assigned",
+                    "⚠️ *Confirm Erase Assigned*\n\n" +
+                    "This will delete ALL assigned numbers.\n\n" +
+                    "Type *confirm* to proceed, or *cancel* to abort."
+                );
                 break;
-                
+
             case "📊 Clear User Stats":
-                state.userStats = {};
-                saveState();
-                await bot.sendMessage(chatId, "✅ All user statistics have been cleared.");
+                await showConfirmation(bot, chatId, "clear_stats",
+                    "⚠️ *Confirm Clear User Stats*\n\n" +
+                    "This will delete ALL user statistics.\n\n" +
+                    "Type *confirm* to proceed, or *cancel* to abort."
+                );
                 break;
-                
+
             case "🧹 Clear Single Stats":
                 await handleClearSingleStats(bot, chatId);
                 break;
-                
+
             case "⚙️ On/Off":
                 state.settings.botEnabled = !state.settings.botEnabled;
                 saveState();
                 const status = state.settings.botEnabled ? "🟢 Online" : "🔴 Offline";
                 await bot.sendMessage(chatId, `✅ Bot is now ${status}`);
                 break;
-                
+
             case "💰 Withdraw On/Off":
                 state.settings.withdrawEnabled = !state.settings.withdrawEnabled;
                 saveState();
                 const wStatus = state.settings.withdrawEnabled ? "🟢 Enabled" : "🔴 Disabled";
                 await bot.sendMessage(chatId, `✅ Withdraw is now ${wStatus}`);
                 break;
-                
+
             case "📡 Set Channel ID":
                 state.runtime.waitingChannelId = userId;
                 saveState();
                 await bot.sendMessage(chatId, "📡 Send the channel ID (e.g., -1001234567890)\nType /cancel to cancel.");
                 break;
-                
+
             case "📡 API Status":
                 await handleApiStatus(bot, chatId);
                 break;
-                
+
             case "🔑 Manage Tokens":
                 await handleManageTokens(bot, chatId);
                 break;
-                
+
             case "🔄 Rotate Token":
                 const rotated = otpWatcher.rotateToken();
                 if (rotated) {
@@ -425,102 +586,93 @@ async function handleMenuCommands(bot, msg) {
                 }
                 await showAdminMenu(bot, chatId);
                 break;
-                
+
             case "🔄 Sync Numbers":
                 await handleSyncNumbers(bot, chatId);
                 break;
-                
+
             case "🧹 Clean Orphans":
                 const cleaned = cleanupOrphanedNumbers();
                 saveState();
-                const msg = cleaned === 0 ? "✅ No orphaned numbers found!" : `✅ Cleaned ${cleaned} orphaned number(s)!`;
-                await bot.sendMessage(chatId, msg);
+                const msgClean = cleaned === 0 ? "✅ No orphaned numbers found!" : `✅ Cleaned ${cleaned} orphaned number(s)!`;
+                await bot.sendMessage(chatId, msgClean);
                 await showAdminMenu(bot, chatId);
                 break;
-                
+
             case "🔍 Test Message":
                 state.runtime.waitingTestMessage = userId;
                 saveState();
                 await bot.sendMessage(chatId, "📨 Send the user ID and message:\nFormat: USER_ID|MESSAGE");
                 break;
-                
+
             case "🔄 Reset":
-                // ===== FIX: Keep channel ID during reset =====
-                const keepChannelId = state.settings.withdrawChannelId; // Save channel ID
-                state.assignedNumbers = {};
-                state.numberOwners = {};
-                state.userStats = {};
-                state.availableNumbers = [];
-                state.lastOtpByNumber = {};
-                state.lastProcessedMessage = {};
-                state.lastGetNumber = {}; // Clear rate limit tracking
-                state.runtime = {
-                    waitingAddNumbers: null,
-                    waitingBroadcast: null,
-                    waitingChannelId: null,
-                    waitingRemoveUsers: null,
-                    waitingRemoveUserSingle: null,
-                    waitingSingleStats: null,
-                    waitingTestOtp: null,
-                    waitingTestMessage: null,
-                    waitingAddToken: null,
-                    selectedUsersForRemoval: [],
-                    addNumberBuffer: [],
-                    activeToken: 0,
-                    lastFetch: null,
-                    otpAttempts: {},
-                    lastOtpCheck: {}
-                };
-                state.settings.withdrawChannelId = keepChannelId; // Restore channel ID
-                saveState();
-                await bot.sendMessage(chatId, "✅ Bot has been reset successfully!\nUsers, pending users, and channel ID preserved.");
+                await showConfirmation(bot, chatId, "reset_all",
+                    "⚠️ *Confirm Reset*\n\n" +
+                    "This will reset:\n" +
+                    "❌ All assigned numbers\n" +
+                    "❌ All number owners\n" +
+                    "❌ All user stats\n" +
+                    "❌ All available numbers\n" +
+                    "❌ All OTP data\n\n" +
+                    "✅ This will keep:\n" +
+                    "✅ Users\n" +
+                    "✅ Pending users\n" +
+                    "✅ Channel ID\n" +
+                    "✅ Tokens\n\n" +
+                    "Type *confirm* to proceed, or *cancel* to abort."
+                );
                 break;
         }
     }
 }
 
+// ===== CONFIRMATION FUNCTION =====
+
+async function showConfirmation(bot, chatId, action, message) {
+    state.runtime.pendingAction = action;
+    state.runtime.waitingConfirmation = true; // Simple flag instead of userId
+    saveState();
+
+    await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+}
+
 // ===== USER COMMAND HANDLERS =====
 
 async function handleGetNumber(bot, chatId, userId) {
-    // ===== RATE LIMIT CHECK =====
     const now = Date.now();
     const lastRequest = state.lastGetNumber[userId] || 0;
-    const timeDiff = (now - lastRequest) / 1000; // Convert to seconds
-    
+    const timeDiff = (now - lastRequest) / 1000;
+
     if (timeDiff < RATE_LIMIT_SECONDS && !config.admins.includes(userId)) {
         const remaining = Math.ceil(RATE_LIMIT_SECONDS - timeDiff);
         return bot.sendMessage(
-            chatId, 
+            chatId,
             `⏳ *Too early request!*\n\n` +
             `Please wait *${remaining} seconds* before requesting another number.\n\n` +
             `📱 You can get a new number after ${remaining}s.`,
             { parse_mode: "Markdown" }
         );
     }
-    
-    // ===== CHECK AVAILABLE NUMBERS =====
+
     if (state.availableNumbers.length === 0) {
         return bot.sendMessage(chatId, "❌ No numbers available at the moment.");
     }
-    
-    // ===== ASSIGN NUMBER =====
+
     const number = state.availableNumbers.shift();
     const assigned = state.assignedNumbers[userId] || [];
     state.assignedNumbers[userId] = [...assigned, number];
     state.numberOwners[number] = userId;
-    
+
     if (!state.userStats[userId]) {
         state.userStats[userId] = { assigned: 0, successOtp: 0, noOtp: 0, withdrawCount: 0 };
     }
     state.userStats[userId].assigned += 1;
-    
-    // ===== UPDATE LAST REQUEST TIME =====
+
     state.lastGetNumber[userId] = Date.now();
-    
     saveState();
-    
+
     logger.info(`📱 Assigned number ${number} to user ${userId}`);
-    
+
     await bot.sendMessage(
         chatId,
         `📱 *Number assigned*\n\n\`${number}\``,
@@ -532,15 +684,15 @@ async function handleJoinRequest(bot, msg) {
     const chatId = msg.chat.id;
     const userId = String(msg.from.id);
     const user = msg.from;
-    
+
     if (state.users[userId]) {
         return bot.sendMessage(chatId, "✅ You are already approved!");
     }
-    
+
     if (state.pendingUsers[userId] && state.pendingUsers[userId].status === "pending") {
         return bot.sendMessage(chatId, "⏳ Your request is already pending approval.");
     }
-    
+
     state.pendingUsers[userId] = {
         id: userId,
         profileName: user.first_name || "User",
@@ -548,9 +700,9 @@ async function handleJoinRequest(bot, msg) {
         status: "pending"
     };
     saveState();
-    
+
     await bot.sendMessage(chatId, "✅ Join request sent! Please wait for admin approval.");
-    
+
     const userInfo = `${user.first_name || "User"} (@${user.username || "No username"})`;
     const keyboard = {
         reply_markup: {
@@ -562,7 +714,7 @@ async function handleJoinRequest(bot, msg) {
             ]
         }
     };
-    
+
     for (const adminId of config.admins) {
         try {
             await bot.sendMessage(
@@ -581,10 +733,10 @@ async function handleYourInfo(bot, chatId, userId) {
     if (!user) {
         return bot.sendMessage(chatId, "❌ User not found.");
     }
-    
+
     const stats = state.userStats[userId] || { assigned: 0, successOtp: 0, noOtp: 0, withdrawCount: 0 };
     const assignedNumbers = state.assignedNumbers[userId] || [];
-    
+
     await bot.sendMessage(
         chatId,
         `📋 *Your Info*\n\n` +
@@ -603,37 +755,37 @@ async function handleWithdraw(bot, chatId, userId) {
     if (!state.settings.withdrawEnabled) {
         return bot.sendMessage(chatId, "❌ Withdrawal is currently disabled.");
     }
-    
+
     if (!state.settings.withdrawChannelId) {
         return bot.sendMessage(chatId, "❌ Withdrawal channel not configured.");
     }
-    
+
     const user = state.users[userId];
     if (!user) {
         return bot.sendMessage(chatId, "❌ User not found.");
     }
-    
+
     const stats = state.userStats[userId] || { assigned: 0, successOtp: 0, noOtp: 0, withdrawCount: 0 };
     const totalOTPs = stats.successOtp || 0;
-    
+
     if (totalOTPs === 0) {
         return bot.sendMessage(chatId, "❌ No OTPs to withdraw.");
     }
-    
+
     stats.successOtp = 0;
     stats.withdrawCount = (stats.withdrawCount || 0) + 1;
     saveState();
-    
+
     const now = new Date();
     const dateStr = now.toLocaleString();
-    
-    const message = 
+
+    const message =
         `💰 *Withdrawal Request*\n\n` +
         `👤 *Name:* ${user.profileName || "Unknown"}\n` +
         `🆔 *User ID:* ${userId}\n` +
         `🔢 *Total OTPs:* ${totalOTPs}\n` +
         `📅 *Date:* ${dateStr}`;
-    
+
     try {
         await bot.sendMessage(state.settings.withdrawChannelId, message, { parse_mode: "Markdown" });
         await bot.sendMessage(chatId, `✅ Withdrawal of ${totalOTPs} OTP(s) submitted successfully!`);
@@ -651,12 +803,12 @@ async function handleStats(bot, chatId) {
     const totalNumbers = state.availableNumbers.length;
     const totalAssigned = Object.keys(state.assignedNumbers).reduce((sum, id) => sum + state.assignedNumbers[id].length, 0);
     const totalOwners = Object.keys(state.numberOwners).length;
-    
+
     let totalOtps = 0;
     for (const userId of Object.keys(state.userStats)) {
         totalOtps += state.userStats[userId].successOtp || 0;
     }
-    
+
     await bot.sendMessage(
         chatId,
         `📊 *Bot Statistics*\n\n` +
@@ -674,25 +826,25 @@ async function handleStats(bot, chatId) {
 
 async function handleUserStatsList(bot, chatId, page) {
     const allUsers = Object.keys(state.users);
-    
+
     if (allUsers.length === 0) {
         return bot.sendMessage(chatId, "❌ No users found.");
     }
-    
+
     const perPage = 10;
     const totalPages = Math.ceil(allUsers.length / perPage);
     const start = page * perPage;
     const end = Math.min(start + perPage, allUsers.length);
     const pageUsers = allUsers.slice(start, end);
-    
+
     let message = `📊 *User Stats* (Page ${page + 1}/${totalPages})\n\n`;
-    
+
     for (const userId of pageUsers) {
         const user = state.users[userId];
         const stats = state.userStats[userId] || { assigned: 0, successOtp: 0, noOtp: 0, withdrawCount: 0 };
         const assignedNumbers = state.assignedNumbers[userId] || [];
         const isAdmin = config.admins.includes(userId);
-        
+
         message += `👤 *${user.profileName || "Unknown"}*`;
         if (isAdmin) message += ` 👑 Admin`;
         message += `\n`;
@@ -702,11 +854,11 @@ async function handleUserStatsList(bot, chatId, page) {
         message += `❌ No OTPs: ${stats.noOtp || 0}\n`;
         message += `💰 Withdrawals: ${stats.withdrawCount || 0}\n\n`;
     }
-    
+
     const keyboard = {
         inline_keyboard: []
     };
-    
+
     const navButtons = [];
     if (page > 0) {
         navButtons.push({ text: "◀️ Previous", callback_data: `userstats_page_${page - 1}` });
@@ -720,20 +872,20 @@ async function handleUserStatsList(bot, chatId, page) {
     keyboard.inline_keyboard.push([
         { text: "❌ Close", callback_data: "close_userstats" }
     ]);
-    
-    await bot.sendMessage(chatId, message, { 
+
+    await bot.sendMessage(chatId, message, {
         parse_mode: "Markdown",
-        reply_markup: keyboard 
+        reply_markup: keyboard
     });
 }
 
 async function handleRemoveUser(bot, chatId) {
     const users = Object.keys(state.users);
-    
+
     if (users.length === 0) {
         return bot.sendMessage(chatId, "❌ No users to remove.");
     }
-    
+
     await showUserListForRemoval(bot, chatId, 0);
 }
 
@@ -744,34 +896,34 @@ async function showUserListForRemoval(bot, chatId, page, messageId = null) {
     const start = page * perPage;
     const end = Math.min(start + perPage, users.length);
     const pageUsers = users.slice(start, end);
-    
+
     let message = "👥 *Select users to remove*\n\n";
     const selected = state.runtime.selectedUsersForRemoval || [];
-    
+
     for (const userId of pageUsers) {
         const user = state.users[userId];
         const isSelected = selected.includes(userId);
         message += `${isSelected ? "☑️" : "⬜"} ${user.profileName || "Unknown"} (${userId})\n`;
     }
-    
+
     message += `\nPage ${page + 1}/${totalPages}`;
     message += `\nSelected: ${selected.length} user(s)`;
-    
+
     const keyboard = {
         inline_keyboard: []
     };
-    
+
     for (const userId of pageUsers) {
         const user = state.users[userId];
         const isSelected = selected.includes(userId);
         keyboard.inline_keyboard.push([
-            { 
-                text: `${isSelected ? "☑️" : "⬜"} ${user.profileName || "Unknown"}`, 
-                callback_data: `select_user_${userId}` 
+            {
+                text: `${isSelected ? "☑️" : "⬜"} ${user.profileName || "Unknown"}`,
+                callback_data: `select_user_${userId}`
             }
         ]);
     }
-    
+
     const navButtons = [];
     if (page > 0) {
         navButtons.push({ text: "◀️", callback_data: `remove_page_${page - 1}` });
@@ -782,14 +934,14 @@ async function showUserListForRemoval(bot, chatId, page, messageId = null) {
     if (navButtons.length > 0) {
         keyboard.inline_keyboard.push(navButtons);
     }
-    
+
     const actionButtons = [];
     if (selected.length > 0) {
         actionButtons.push({ text: "🗑️ Remove Selected", callback_data: "remove_selected_users" });
     }
     actionButtons.push({ text: "❌ Cancel", callback_data: "cancel_remove_users" });
     keyboard.inline_keyboard.push(actionButtons);
-    
+
     if (messageId) {
         await bot.editMessageText(message, {
             chat_id: chatId,
@@ -798,20 +950,20 @@ async function showUserListForRemoval(bot, chatId, page, messageId = null) {
             reply_markup: keyboard
         });
     } else {
-        await bot.sendMessage(chatId, message, { 
+        await bot.sendMessage(chatId, message, {
             parse_mode: "Markdown",
-            reply_markup: keyboard 
+            reply_markup: keyboard
         });
     }
 }
 
 async function handlePendingList(bot, chatId, page, messageId = null) {
     const pendingUsers = Object.keys(state.pendingUsers).filter(
-        id => state.pendingUsers[id].status === "pending" || 
-              state.pendingUsers[id].status === "rejected" ||
-              state.pendingUsers[id].status === "removed"
+        id => state.pendingUsers[id].status === "pending" ||
+            state.pendingUsers[id].status === "rejected" ||
+            state.pendingUsers[id].status === "removed"
     );
-    
+
     if (pendingUsers.length === 0) {
         const msg = "📋 No pending users.";
         if (messageId) {
@@ -821,37 +973,37 @@ async function handlePendingList(bot, chatId, page, messageId = null) {
         }
         return;
     }
-    
+
     const perPage = 5;
     const totalPages = Math.ceil(pendingUsers.length / perPage);
     const start = page * perPage;
     const end = Math.min(start + perPage, pendingUsers.length);
     const pageUsers = pendingUsers.slice(start, end);
-    
+
     let message = "📋 *Pending Users*\n\n";
-    
+
     for (const userId of pageUsers) {
         const user = state.pendingUsers[userId];
         const statusEmoji = user.status === "pending" ? "⏳" : user.status === "rejected" ? "❌" : "🚫";
         message += `${statusEmoji} ${user.profileName || "Unknown"} (${userId}) - ${user.status}\n`;
     }
-    
+
     message += `\nPage ${page + 1}/${totalPages}`;
-    
+
     const keyboard = {
         inline_keyboard: []
     };
-    
+
     for (const userId of pageUsers) {
         const user = state.pendingUsers[userId];
         keyboard.inline_keyboard.push([
-            { 
-                text: `${user.profileName || "Unknown"}`, 
-                callback_data: `pending_user_${userId}` 
+            {
+                text: `${user.profileName || "Unknown"}`,
+                callback_data: `pending_user_${userId}`
             }
         ]);
     }
-    
+
     const navButtons = [];
     if (page > 0) {
         navButtons.push({ text: "◀️", callback_data: `pending_page_${page - 1}` });
@@ -862,11 +1014,11 @@ async function handlePendingList(bot, chatId, page, messageId = null) {
     if (navButtons.length > 0) {
         keyboard.inline_keyboard.push(navButtons);
     }
-    
+
     keyboard.inline_keyboard.push([
         { text: "❌ Close", callback_data: "close_pending" }
     ]);
-    
+
     if (messageId) {
         await bot.editMessageText(message, {
             chat_id: chatId,
@@ -875,20 +1027,20 @@ async function handlePendingList(bot, chatId, page, messageId = null) {
             reply_markup: keyboard
         });
     } else {
-        await bot.sendMessage(chatId, message, { 
+        await bot.sendMessage(chatId, message, {
             parse_mode: "Markdown",
-            reply_markup: keyboard 
+            reply_markup: keyboard
         });
     }
 }
 
 async function handleClearSingleStats(bot, chatId) {
     const users = Object.keys(state.users);
-    
+
     if (users.length === 0) {
         return bot.sendMessage(chatId, "❌ No users to clear stats for.");
     }
-    
+
     await showUserListForStats(bot, chatId, 0);
 }
 
@@ -899,32 +1051,32 @@ async function showUserListForStats(bot, chatId, page, messageId = null) {
     const start = page * perPage;
     const end = Math.min(start + perPage, users.length);
     const pageUsers = users.slice(start, end);
-    
+
     let message = "👤 *Select user to clear stats*\n\n";
-    
+
     for (const userId of pageUsers) {
         const user = state.users[userId];
         const stats = state.userStats[userId] || { assigned: 0, successOtp: 0, noOtp: 0 };
         message += `${user.profileName || "Unknown"} (${userId})\n`;
         message += `  OTPs: ${stats.successOtp || 0}\n\n`;
     }
-    
+
     message += `Page ${page + 1}/${totalPages}`;
-    
+
     const keyboard = {
         inline_keyboard: []
     };
-    
+
     for (const userId of pageUsers) {
         const user = state.users[userId];
         keyboard.inline_keyboard.push([
-            { 
-                text: `🧹 ${user.profileName || "Unknown"}`, 
-                callback_data: `clear_stats_user_${userId}` 
+            {
+                text: `🧹 ${user.profileName || "Unknown"}`,
+                callback_data: `clear_stats_user_${userId}`
             }
         ]);
     }
-    
+
     const navButtons = [];
     if (page > 0) {
         navButtons.push({ text: "◀️", callback_data: `stats_page_${page - 1}` });
@@ -935,11 +1087,11 @@ async function showUserListForStats(bot, chatId, page, messageId = null) {
     if (navButtons.length > 0) {
         keyboard.inline_keyboard.push(navButtons);
     }
-    
+
     keyboard.inline_keyboard.push([
         { text: "❌ Cancel", callback_data: "cancel_stats" }
     ]);
-    
+
     if (messageId) {
         await bot.editMessageText(message, {
             chat_id: chatId,
@@ -948,9 +1100,9 @@ async function showUserListForStats(bot, chatId, page, messageId = null) {
             reply_markup: keyboard
         });
     } else {
-        await bot.sendMessage(chatId, message, { 
+        await bot.sendMessage(chatId, message, {
             parse_mode: "Markdown",
-            reply_markup: keyboard 
+            reply_markup: keyboard
         });
     }
 }
@@ -958,22 +1110,22 @@ async function showUserListForStats(bot, chatId, page, messageId = null) {
 async function handleApiStatus(bot, chatId) {
     try {
         const status = await otpWatcher.getApiStatus();
-        
+
         let message = `📊 *API Status*\n\n`;
-        
+
         if (status.overallStatus === 'online') {
             message += `🟢 *Online* - API is working\n`;
         } else {
             message += `🔴 *Offline* - No active tokens available\n`;
         }
-        
+
         message += `\n📋 *Token Details:*\n`;
         message += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
-        
+
         for (const token of status.tokenDetails) {
             const statusIcon = token.active && !token.limited ? '🟢' : (token.active ? '🟡' : '🔴');
             const statusText = token.active && !token.limited ? 'Active' : (token.active ? 'Limited' : 'Inactive');
-            
+
             message += `${statusIcon} *Token ${token.index}* (${token.id})\n`;
             message += `   Status: ${statusText}\n`;
             message += `   Errors: ${token.errorCount}\n`;
@@ -982,15 +1134,15 @@ async function handleApiStatus(bot, chatId) {
             message += `   Last Success: ${token.lastSuccess}\n`;
             message += `━━━━━━━━━━━━━━━━━━━━━\n`;
         }
-        
+
         message += `\n📊 *Summary:*\n`;
         message += `   Active Tokens: ${status.activeTokens}/${status.totalTokens}\n`;
         message += `   Total Records: ${status.totalRecords}\n`;
-        
+
         if (status.activeTokens === 0) {
             message += `\n💡 *Tip:* No tokens are active. Use "🔑 Manage Tokens" to add tokens.`;
         }
-        
+
         await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
     } catch (err) {
         logger.error("API Status error:", err.message);
@@ -1001,9 +1153,9 @@ async function handleApiStatus(bot, chatId) {
 async function handleManageTokens(bot, chatId) {
     try {
         const tokenStatus = otpWatcher.getTokenStatus();
-        
+
         let message = `🔑 *Token Management*\n\n`;
-        
+
         if (tokenStatus.length === 0) {
             message += `No tokens configured.\n\n`;
         } else {
@@ -1016,13 +1168,13 @@ async function handleManageTokens(bot, chatId) {
                 message += `   Last Checked: ${token.lastChecked}\n\n`;
             }
         }
-        
+
         message += `\n*Available Actions:*\n`;
         message += `➕ Add Token - Add or update a token\n`;
         message += `🗑️ Remove Token - Remove a token\n`;
         message += `🔄 Rotate Token - Switch to next token\n\n`;
         message += `💡 When a token is invalid, you'll be notified automatically.`;
-        
+
         const keyboard = {
             inline_keyboard: [
                 [
@@ -1038,12 +1190,11 @@ async function handleManageTokens(bot, chatId) {
                 ]
             ]
         };
-        
+
         await bot.sendMessage(chatId, message, {
             parse_mode: "Markdown",
             reply_markup: keyboard
         });
-        
     } catch (err) {
         logger.error("Manage tokens error:", err.message);
         await bot.sendMessage(chatId, `❌ Error: ${err.message}`);
@@ -1052,22 +1203,22 @@ async function handleManageTokens(bot, chatId) {
 
 async function handleSyncNumbers(bot, chatId) {
     const syncMsg = await bot.sendMessage(chatId, "🔄 Syncing numbers from all API tokens... Please wait.");
-    
+
     try {
         const allNumbers = [];
         const tokens = config.api.tokens || [];
-        
+
         for (let i = 0; i < tokens.length; i++) {
             const tokenString = tokens[i];
             const parts = tokenString.split('|');
             const tokenId = parts[0] || `token_${i + 1}`;
             const token = parts.slice(1).join('|') || tokenString;
-            
+
             try {
                 const endDate = new Date();
                 const startDate = new Date();
                 startDate.setDate(startDate.getDate() - 7);
-                
+
                 const url = new URL(config.api.baseUrl);
                 url.searchParams.append('type', 'sms');
                 url.searchParams.append('stock_account', '0');
@@ -1077,7 +1228,7 @@ async function handleSyncNumbers(bot, chatId) {
                 url.searchParams.append('sortDirection', 'desc');
                 url.searchParams.append('period[0]', startDate.toISOString());
                 url.searchParams.append('period[1]', endDate.toISOString());
-                
+
                 const response = await fetch(url.toString(), {
                     headers: {
                         'accept': 'application/json',
@@ -1085,7 +1236,7 @@ async function handleSyncNumbers(bot, chatId) {
                         'content-type': 'application/json'
                     }
                 });
-                
+
                 if (response.ok) {
                     const data = await response.json();
                     if (data.data && data.data.length > 0) {
@@ -1102,37 +1253,36 @@ async function handleSyncNumbers(bot, chatId) {
                 await bot.sendMessage(chatId, `❌ Error in Token ${tokenId}: ${err.message}`);
             }
         }
-        
+
         const uniqueNumbers = [...new Set(allNumbers)];
         let added = 0;
-        
+
         for (const number of uniqueNumbers) {
             if (!state.availableNumbers.includes(number) && !state.numberOwners[number]) {
                 state.availableNumbers.push(number);
                 added++;
             }
         }
-        
+
         if (added > 0) {
             saveState();
             await bot.sendMessage(chatId, `✅ Added ${added} new numbers to available pool!\n📊 Total available: ${state.availableNumbers.length}`);
         } else {
             await bot.sendMessage(chatId, `ℹ️ No new numbers to add. All ${uniqueNumbers.length} numbers already exist.`);
         }
-        
-        const summary = 
+
+        const summary =
             `📊 *Sync Summary*\n\n` +
             `Total numbers in API: ${uniqueNumbers.length}\n` +
             `Available numbers in bot: ${state.availableNumbers.length}\n` +
             `Assigned numbers: ${Object.keys(state.numberOwners).length}\n` +
             `Total users: ${Object.keys(state.users).length}`;
-        
+
         await bot.sendMessage(chatId, summary, { parse_mode: "Markdown" });
-        
     } catch (err) {
         await bot.sendMessage(chatId, `❌ Sync failed: ${err.message}`);
     }
-    
+
     await bot.deleteMessage(chatId, syncMsg.message_id);
 }
 
@@ -1150,7 +1300,7 @@ async function showAdminMenu(bot, chatId) {
         ["🔄 Reset", "🧹 Clean Orphans"],
         ["🔍 Test Message"]
     ];
-    
+
     await bot.sendMessage(chatId, "🔧 Admin Menu", {
         reply_markup: {
             keyboard: keyboard,
