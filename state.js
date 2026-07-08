@@ -21,7 +21,8 @@ const defaultState = {
         lastUpdate: null,
         autoDisableOnInvalid: true
     },
-    // ===== NEW: Rate Limit Tracking =====
+    // ===== RATE LIMIT =====
+    rateLimit: 15, // Default 15 seconds
     lastGetNumber: {}, // userId -> timestamp
     runtime: {
         waitingAddNumbers: null,
@@ -44,6 +45,8 @@ const defaultState = {
         lastOtpCheck: {},
         waitingConfirmation: false,
         pendingAction: null,
+        // ===== RATE LIMIT SETTING =====
+        waitingRateLimit: null
     },
     lastOtpByNumber: {},
     processedMessages: {},
@@ -66,6 +69,10 @@ function loadState() {
         // Ensure lastGetNumber exists
         if (!state.lastGetNumber) {
             state.lastGetNumber = {};
+        }
+        // Ensure rateLimit exists
+        if (!state.rateLimit) {
+            state.rateLimit = 15;
         }
     } catch (err) {
         console.log("State load error:", err.message);

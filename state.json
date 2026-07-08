@@ -21,12 +21,64 @@
       "status": "pending"
     }
   },
-  "availableNumbers": [],
-  "assignedNumbers": {},
-  "numberOwners": {},
+  "availableNumbers": [
+    "+3725039872",
+    "+3725039876",
+    "+3725039877",
+    "+3725039878",
+    "+3725039879",
+    "+3725039888",
+    "+3725039893",
+    "+3725039895",
+    "+3725039900",
+    "+3725039902",
+    "+3725039909",
+    "+3725039910",
+    "+3725039913",
+    "+3725039916",
+    "+3725039917",
+    "+3725039918",
+    "+3725039919",
+    "+3725039921",
+    "+3725039925",
+    "+3725039927",
+    "+3725039928",
+    "+3725039930",
+    "+3725039932",
+    "+3725039933",
+    "+3725039935",
+    "+3725039937",
+    "+3725039940",
+    "+3725039941",
+    "+3725039942",
+    "+3725039946",
+    "+3725039952",
+    "+3725039955",
+    "+3725039956"
+  ],
+  "assignedNumbers": {
+    "7495641135": [
+      "+3725039869",
+      "+3725039870"
+    ],
+    "7598185964": [
+      "+3725039871"
+    ]
+  },
+  "numberOwners": {
+    "+3725039869": "7495641135",
+    "+3725039870": "7495641135",
+    "+3725039871": "7598185964"
+  },
   "userStats": {
     "7598185964": {
-      "assigned": 1,
+      "assigned": 2,
+      "successOtp": 0,
+      "noOtp": 0,
+      "withdrawCount": 0
+    },
+    "7495641135": {
+      "assigned": 2,
       "successOtp": 0,
       "noOtp": 0,
       "withdrawCount": 0
@@ -42,8 +94,10 @@
     "lastUpdate": null,
     "autoDisableOnInvalid": true
   },
+  "rateLimit": 10,
   "lastGetNumber": {
-    "7598185964": 1783516037311
+    "7598185964": 1783527992675,
+    "7495641135": 1783527982225
   },
   "runtime": {
     "waitingAddNumbers": null,
@@ -65,7 +119,8 @@
     "broadcastUserCount": null,
     "pendingAction": null,
     "waitingConfirmation": false,
-    "waitingBroadcastConfirm": null
+    "waitingBroadcastConfirm": null,
+    "waitingRateLimit": null
   },
   "lastOtpByNumber": {},
   "processedMessages": {},

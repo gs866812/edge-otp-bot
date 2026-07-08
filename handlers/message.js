@@ -3,10 +3,12 @@ const config = require("../config");
 const logger = require("../services/logger");
 const otpWatcher = require("../services/otpWatcher");
 
-// ===== RATE LIMIT CONFIGURATION =====
-const RATE_LIMIT_SECONDS = 15; // 15 seconds wait time
+// ===== RATE LIMIT - Get from state =====
+function getRateLimit() {
+    return state.rateLimit || 15;
+}
 
-module.exports = function (bot) {
+module.exports = function(bot) {
     bot.on("message", async (msg) => {
         const chatId = msg.chat.id;
         const userId = String(msg.from.id);
@@ -18,18 +20,30 @@ module.exports = function (bot) {
             return bot.sendMessage(chatId, "⚠️ Bot is currently disabled. Please try again later.");
         }
 
-        // FIRST: Check if we're in a waiting state
+        // Check if admin is setting rate limit
+        if (state.runtime.waitingRateLimit === userId && config.admins.includes(userId)) {
+            const value = parseInt(text);
+            if (isNaN(value) || value < 1) {
+                await bot.sendMessage(chatId, "❌ Please enter a valid number (e.g., 10, 15, 20)");
+                return true;
+            }
+            state.rateLimit = value;
+            state.runtime.waitingRateLimit = null;
+            saveState();
+            await bot.sendMessage(chatId, `✅ Rate limit set to ${value} seconds!`);
+            await showAdminMenu(bot, chatId);
+            return true;
+        }
+
         const handled = await handleRuntimeStates(bot, msg);
         if (handled) return;
 
-        // SECOND: Check if the message is a phone number
         const phoneNumber = extractPhoneNumber(text);
         if (phoneNumber) {
             await handlePhoneNumberMessage(bot, msg, phoneNumber);
             return;
         }
 
-        // THIRD: Handle menu commands
         await handleMenuCommands(bot, msg);
     });
 };
@@ -120,6 +134,27 @@ async function handleRuntimeStates(bot, msg) {
     const userId = String(msg.from.id);
     const text = msg.text;
     const isAdmin = config.admins.includes(userId);
+
+    // ===== CANCEL ALL =====
+    if (text === '/start' || text === '/cancel') {
+        state.runtime.waitingAddNumbers = null;
+        state.runtime.waitingBroadcast = null;
+        state.runtime.waitingChannelId = null;
+        state.runtime.waitingSingleStats = null;
+        state.runtime.waitingTestOtp = null;
+        state.runtime.waitingTestMessage = null;
+        state.runtime.waitingRemoveUserSingle = null;
+        state.runtime.waitingAddToken = null;
+        state.runtime.waitingConfirmation = false;
+        state.runtime.waitingBroadcastConfirm = null;
+        state.runtime.waitingRateLimit = null;
+        state.runtime.broadcastMessage = null;
+        state.runtime.broadcastUserCount = null;
+        state.runtime.pendingAction = null;
+        state.runtime.addNumberBuffer = [];
+        saveState();
+        return false;
+    }
 
     // ===== TOKEN ADDITION =====
     if (state.runtime.waitingAddToken === userId && isAdmin) {
@@ -273,6 +308,7 @@ async function handleRuntimeStates(bot, msg) {
         state.runtime.broadcastMessage = broadcastMsg;
         state.runtime.broadcastUserCount = userCount;
         state.runtime.waitingBroadcastConfirm = userId;
+        state.runtime.waitingBroadcast = null;
         saveState();
 
         await bot.sendMessage(chatId, preview, { parse_mode: "Markdown" });
@@ -331,7 +367,6 @@ async function handleRuntimeStates(bot, msg) {
         const action = state.runtime.pendingAction;
 
         if (text.toLowerCase() === "confirm") {
-            // Execute the action
             switch (action) {
                 case "erase_number":
                     state.availableNumbers = [];
@@ -371,11 +406,12 @@ async function handleRuntimeStates(bot, msg) {
                         lastFetch: null,
                         otpAttempts: {},
                         lastOtpCheck: {},
+                        waitingConfirmation: false,
+                        pendingAction: null,
                         broadcastMessage: null,
                         broadcastUserCount: null,
                         waitingBroadcastConfirm: null,
-                        waitingConfirmation: false,
-                        pendingAction: null
+                        waitingRateLimit: null
                     };
                     state.settings.withdrawChannelId = keepChannelId;
                     await bot.sendMessage(chatId, "✅ Bot has been reset successfully!\nUsers, pending users, and channel ID preserved.");
@@ -390,7 +426,6 @@ async function handleRuntimeStates(bot, msg) {
             saveState();
             await showAdminMenu(bot, chatId);
             return true;
-
         } else if (text.toLowerCase() === "cancel") {
             state.runtime.waitingConfirmation = false;
             state.runtime.pendingAction = null;
@@ -399,7 +434,6 @@ async function handleRuntimeStates(bot, msg) {
             await showAdminMenu(bot, chatId);
             return true;
         } else {
-            // If user types something else, remind them
             await bot.sendMessage(chatId, "❌ Type *confirm* to proceed or *cancel* to abort.", { parse_mode: "Markdown" });
             return true;
         }
@@ -427,27 +461,17 @@ async function handleRuntimeStates(bot, msg) {
         return true;
     }
 
-    // ===== CANCEL ALL =====
-    if (text === '/start' || text === '/cancel') {
-        state.runtime.waitingAddNumbers = null;
-        state.runtime.waitingBroadcast = null;
-        state.runtime.waitingChannelId = null;
-        state.runtime.waitingSingleStats = null;
-        state.runtime.waitingTestOtp = null;
-        state.runtime.waitingTestMessage = null;
-        state.runtime.waitingRemoveUserSingle = null;
-        state.runtime.waitingAddToken = null;
-        state.runtime.waitingConfirmation = null;
-        state.runtime.waitingBroadcastConfirm = null;
-        state.runtime.broadcastMessage = null;
-        state.runtime.broadcastUserCount = null;
-        state.runtime.pendingAction = null;
-        state.runtime.addNumberBuffer = [];
-        saveState();
-        return false;
-    }
-
     return false;
+}
+
+// ===== CONFIRMATION FUNCTION =====
+
+async function showConfirmation(bot, chatId, action, message) {
+    state.runtime.pendingAction = action;
+    state.runtime.waitingConfirmation = true;
+    saveState();
+
+    await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
 }
 
 // ===== MENU COMMANDS =====
@@ -512,6 +536,10 @@ async function handleMenuCommands(bot, msg) {
             case "📢 Broadcast":
                 if (state.runtime.waitingBroadcast === userId) {
                     await bot.sendMessage(chatId, "⏳ You are already in broadcast mode. Please send your message or type /cancel.");
+                    break;
+                }
+                if (state.runtime.waitingBroadcastConfirm === userId) {
+                    await bot.sendMessage(chatId, "⏳ You are already in broadcast confirmation. Type *confirm* or *cancel*.");
                     break;
                 }
                 state.runtime.waitingBroadcast = userId;
@@ -587,6 +615,19 @@ async function handleMenuCommands(bot, msg) {
                 await showAdminMenu(bot, chatId);
                 break;
 
+            case "⏱️ Set Rate Limit":
+                state.runtime.waitingRateLimit = userId;
+                saveState();
+                const currentRate = state.rateLimit || 15;
+                await bot.sendMessage(
+                    chatId,
+                    `⏱️ *Set Rate Limit*\n\n` +
+                    `Current Rate Limit: ${currentRate} seconds\n\n` +
+                    `Enter new value in seconds (e.g., 5, 10, 15, 20, 30):\n\n` +
+                    `Type /cancel to cancel.`
+                );
+                break;
+
             case "🔄 Sync Numbers":
                 await handleSyncNumbers(bot, chatId);
                 break;
@@ -626,25 +667,16 @@ async function handleMenuCommands(bot, msg) {
     }
 }
 
-// ===== CONFIRMATION FUNCTION =====
-
-async function showConfirmation(bot, chatId, action, message) {
-    state.runtime.pendingAction = action;
-    state.runtime.waitingConfirmation = true; // Simple flag instead of userId
-    saveState();
-
-    await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-}
-
 // ===== USER COMMAND HANDLERS =====
 
 async function handleGetNumber(bot, chatId, userId) {
+    const rateLimit = state.rateLimit || 15;
     const now = Date.now();
     const lastRequest = state.lastGetNumber[userId] || 0;
     const timeDiff = (now - lastRequest) / 1000;
 
-    if (timeDiff < RATE_LIMIT_SECONDS && !config.admins.includes(userId)) {
-        const remaining = Math.ceil(RATE_LIMIT_SECONDS - timeDiff);
+    if (timeDiff < rateLimit && !config.admins.includes(userId)) {
+        const remaining = Math.ceil(rateLimit - timeDiff);
         return bot.sendMessage(
             chatId,
             `⏳ *Too early request!*\n\n` +
@@ -1296,9 +1328,9 @@ async function showAdminMenu(bot, chatId) {
         ["🧹 Clear Single Stats", "⚙️ On/Off"],
         ["💰 Withdraw On/Off", "📡 Set Channel ID"],
         ["📡 API Status", "🔑 Manage Tokens"],
-        ["🔄 Rotate Token", "🔄 Sync Numbers"],
-        ["🔄 Reset", "🧹 Clean Orphans"],
-        ["🔍 Test Message"]
+        ["🔄 Rotate Token", "⏱️ Set Rate Limit"],
+        ["🔄 Sync Numbers", "🔄 Reset"],
+        ["🧹 Clean Orphans", "🔍 Test Message"]
     ];
 
     await bot.sendMessage(chatId, "🔧 Admin Menu", {

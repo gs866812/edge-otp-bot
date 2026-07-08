@@ -11,10 +11,10 @@ function getMenuKeyboard(isAdmin) {
             ["🧹 Erase Assigned", "📊 Clear User Stats"],
             ["🧹 Clear Single Stats", "⚙️ On/Off"],
             ["💰 Withdraw On/Off", "📡 Set Channel ID"],
-            ["📡 API Status", "🔑 Manage Tokens"],  // Updated
-            ["🔄 Rotate Token", "🔄 Sync Numbers"],
-            ["🔄 Reset", "🧹 Clean Orphans"],
-            ["🔍 Test Message"]
+            ["📡 API Status", "🔑 Manage Tokens"],
+            ["🔄 Rotate Token", "⏱️ Set Rate Limit"],
+            ["🔄 Sync Numbers", "🔄 Reset"],
+            ["🧹 Clean Orphans", "🔍 Test Message"]
         ];
     } else {
         return [
@@ -31,11 +31,28 @@ module.exports = function(bot) {
         const user = msg.from;
         const isAdmin = config.admins.includes(userId);
         
+        // ===== CLEAR RUNTIME STATES =====
+        state.runtime.waitingAddNumbers = null;
+        state.runtime.waitingBroadcast = null;
+        state.runtime.waitingChannelId = null;
+        state.runtime.waitingSingleStats = null;
+        state.runtime.waitingTestOtp = null;
+        state.runtime.waitingTestMessage = null;
+        state.runtime.waitingRemoveUserSingle = null;
+        state.runtime.waitingAddToken = null;
+        state.runtime.waitingConfirmation = false;
+        state.runtime.waitingBroadcastConfirm = null;
+        state.runtime.waitingRateLimit = null;
+        state.runtime.broadcastMessage = null;
+        state.runtime.broadcastUserCount = null;
+        state.runtime.pendingAction = null;
+        state.runtime.addNumberBuffer = [];
+        saveState();
+        
         if (!state.settings.botEnabled && !isAdmin) {
             return bot.sendMessage(chatId, "⚠️ Bot is currently disabled. Please try again later.");
         }
         
-        // Add admin to users list if not already
         if (isAdmin && !state.users[userId]) {
             state.users[userId] = {
                 id: userId,
@@ -51,14 +68,42 @@ module.exports = function(bot) {
         
         const isApproved = state.users[userId] !== undefined;
         const isPending = state.pendingUsers[userId] !== undefined;
+        const isRemoved = isPending && state.pendingUsers[userId]?.status === "removed";
+        const isRejected = isPending && state.pendingUsers[userId]?.status === "rejected";
+        
+        // If user is removed or rejected, allow them to send request again
+        if (isRemoved || isRejected) {
+            delete state.pendingUsers[userId];
+            saveState();
+            
+            const keyboard = {
+                reply_markup: {
+                    keyboard: [["📝 Join Request"]],
+                    resize_keyboard: true,
+                    one_time_keyboard: false
+                }
+            };
+            
+            return bot.sendMessage(
+                chatId,
+                `👋 Welcome back ${user.first_name || "User"}!\n\n` +
+                `You can send a new join request by clicking the button below.`,
+                keyboard
+            );
+        }
         
         if (!isAdmin && !isApproved) {
             if (isPending) {
                 const status = state.pendingUsers[userId].status;
                 if (status === "pending") {
-                    return bot.sendMessage(chatId, "⏳ Your join request is pending approval from admin.");
-                } else if (status === "rejected" || status === "removed") {
-                    return bot.sendMessage(chatId, "❌ Your access has been rejected or removed. Please contact admin.");
+                    const keyboard = {
+                        reply_markup: {
+                            keyboard: [["📝 Join Request"]],
+                            resize_keyboard: true,
+                            one_time_keyboard: false
+                        }
+                    };
+                    return bot.sendMessage(chatId, "⏳ Your join request is pending approval from admin.", keyboard);
                 }
             }
             
