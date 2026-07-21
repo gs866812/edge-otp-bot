@@ -13,17 +13,16 @@ const defaultState = {
     settings: {
         botEnabled: true,
         withdrawEnabled: true,
-        withdrawChannelId: ""
+        withdrawChannelId: "",
+        otpLogChannelId: "" // NEW: OTP লগ গ্রুপের চ্যানেল আইডি
     },
-    // ===== NEW: Token Management =====
     tokens: {
-        list: [], // Array of {id, token, active, lastChecked, errorCount}
+        list: [],
         lastUpdate: null,
         autoDisableOnInvalid: true
     },
-    // ===== RATE LIMIT =====
-    rateLimit: 15, // Default 15 seconds
-    lastGetNumber: {}, // userId -> timestamp
+    rateLimit: 15,
+    lastGetNumber: {},
     runtime: {
         waitingAddNumbers: null,
         waitingBroadcast: null,
@@ -33,10 +32,10 @@ const defaultState = {
         waitingSingleStats: null,
         waitingTestOtp: null,
         waitingTestMessage: null,
-        // ===== NEW: Token management states =====
         waitingAddToken: null,
         waitingRemoveToken: null,
         waitingUpdateToken: null,
+        waitingOtpLogChannelId: null, // NEW: OTP লগ চ্যানেল সেট করার জন্য
         selectedUsersForRemoval: [],
         addNumberBuffer: [],
         activeToken: 0,
@@ -45,13 +44,13 @@ const defaultState = {
         lastOtpCheck: {},
         waitingConfirmation: false,
         pendingAction: null,
-        // ===== RATE LIMIT SETTING =====
         waitingRateLimit: null
     },
     lastOtpByNumber: {},
     processedMessages: {},
     lastAutoSentByNumber: {},
-    lastProcessedMessage: {}
+    lastProcessedMessage: {},
+    processedOtpIds: {} // NEW: ডুপ্লিকেট OTP প্রিভেনশনের জন্য
 };
 
 let state = { ...defaultState };
@@ -66,14 +65,11 @@ function loadState() {
         const raw = fs.readFileSync(STATE_FILE, "utf8");
         state = { ...defaultState, ...JSON.parse(raw) };
 
-        // Ensure lastGetNumber exists
-        if (!state.lastGetNumber) {
-            state.lastGetNumber = {};
-        }
-        // Ensure rateLimit exists
-        if (!state.rateLimit) {
-            state.rateLimit = 15;
-        }
+        if (!state.lastGetNumber) state.lastGetNumber = {};
+        if (!state.rateLimit) state.rateLimit = 15;
+        if (!state.settings.otpLogChannelId) state.settings.otpLogChannelId = "";
+        if (!state.processedOtpIds) state.processedOtpIds = {};
+        if (!state.tokens) state.tokens = { list: [], lastUpdate: null };
     } catch (err) {
         console.log("State load error:", err.message);
         state = JSON.parse(JSON.stringify(defaultState));

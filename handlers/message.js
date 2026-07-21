@@ -8,7 +8,7 @@ function getRateLimit() {
     return state.rateLimit || 15;
 }
 
-module.exports = function(bot) {
+module.exports = function (bot) {
     bot.on("message", async (msg) => {
         const chatId = msg.chat.id;
         const userId = String(msg.from.id);
@@ -206,22 +206,40 @@ async function handleRuntimeStates(bot, msg) {
                 .filter(n => n.length > 0)
                 .map(n => n.startsWith('+') ? n : '+' + n);
 
+            // ===== FIX: ডুপ্লিকেট নাম্বার চেক =====
             const uniqueNumbers = [...new Set(validNumbers)];
 
-            if (uniqueNumbers.length === 0) {
-                await bot.sendMessage(chatId, "❌ No valid numbers found.");
+            // চেক করা কোন নাম্বার ইতিমধ্যে available বা assigned আছে কিনা
+            const existingNumbers = new Set([
+                ...state.availableNumbers,
+                ...Object.keys(state.numberOwners)
+            ]);
+
+            const newNumbers = uniqueNumbers.filter(n => !existingNumbers.has(n));
+            const duplicateCount = uniqueNumbers.length - newNumbers.length;
+
+            if (newNumbers.length === 0) {
+                await bot.sendMessage(
+                    chatId,
+                    `❌ No new numbers to add. All ${uniqueNumbers.length} number(s) already exist.\n` +
+                    `(Available: ${state.availableNumbers.length}, Assigned: ${Object.keys(state.numberOwners).length})`
+                );
                 state.runtime.addNumberBuffer = [];
                 state.runtime.waitingAddNumbers = null;
                 saveState();
                 return true;
             }
 
-            state.availableNumbers.push(...uniqueNumbers);
+            state.availableNumbers.push(...newNumbers);
             state.runtime.addNumberBuffer = [];
             state.runtime.waitingAddNumbers = null;
             saveState();
 
-            await bot.sendMessage(chatId, `✅ Added ${uniqueNumbers.length} number(s) successfully!`);
+            let msg = `✅ Added ${newNumbers.length} new number(s) successfully!`;
+            if (duplicateCount > 0) {
+                msg += `\n⚠️ Skipped ${duplicateCount} duplicate number(s).`;
+            }
+            await bot.sendMessage(chatId, msg);
             await showAdminMenu(bot, chatId);
             return true;
         }
@@ -460,6 +478,17 @@ async function handleRuntimeStates(bot, msg) {
         await showAdminMenu(bot, chatId);
         return true;
     }
+    // ===== ADD: নতুন কেস handleOtpLogChannel সেট করার জন্য =====
+
+    if (state.runtime.waitingOtpLogChannelId === userId && isAdmin) {
+        state.settings.otpLogChannelId = text.trim();
+        state.runtime.waitingOtpLogChannelId = null;
+        saveState();
+
+        await bot.sendMessage(chatId, `✅ OTP Log Channel ID set to: ${text.trim()}`);
+        await showAdminMenu(bot, chatId);
+        return true;
+    }
 
     return false;
 }
@@ -499,6 +528,36 @@ async function handleMenuCommands(bot, msg) {
             break;
         case "💰 Withdraw OTP":
             await handleWithdraw(bot, chatId, userId);
+            break;
+
+        // ===== handleMenuCommands ফাংশনে এই কেস যোগ/আপডেট করুন =====
+
+        case "📡 OTP Log Group":
+            const groupUsername = config.otpGroupUsername;
+            if (!groupUsername) {
+                await bot.sendMessage(chatId, "❌ OTP Log Group not configured yet.");
+                return;
+            }
+
+            // ===== সরাসরি গ্রুপে যাওয়ার বাটন =====
+            const keyboard = {
+                inline_keyboard: [
+                    [
+                        {
+                            text: "📡 Join OTP Log Group",
+                            url: `https://t.me/${groupUsername}`
+                        }
+                    ],
+                ]
+            };
+
+            await bot.sendMessage(
+                chatId,
+                `📡 Click the button below to join OTP Log Group:`,
+                {
+                    reply_markup: keyboard
+                }
+            );
             break;
     }
 
@@ -661,6 +720,16 @@ async function handleMenuCommands(bot, msg) {
                     "✅ Channel ID\n" +
                     "✅ Tokens\n\n" +
                     "Type *confirm* to proceed, or *cancel* to abort."
+                );
+                break;
+            case "📡 Set OTP Log Channel":
+                state.runtime.waitingOtpLogChannelId = userId;
+                saveState();
+                await bot.sendMessage(
+                    chatId,
+                    "📡 Send the OTP Log Channel ID (e.g., -1001234567890)\n" +
+                    "All OTPs will be forwarded to this channel with masked numbers.\n" +
+                    "Type /cancel to cancel."
                 );
                 break;
         }
@@ -1327,10 +1396,11 @@ async function showAdminMenu(bot, chatId) {
         ["🧹 Erase Assigned", "📊 Clear User Stats"],
         ["🧹 Clear Single Stats", "⚙️ On/Off"],
         ["💰 Withdraw On/Off", "📡 Set Channel ID"],
-        ["📡 API Status", "🔑 Manage Tokens"],
-        ["🔄 Rotate Token", "⏱️ Set Rate Limit"],
-        ["🔄 Sync Numbers", "🔄 Reset"],
-        ["🧹 Clean Orphans", "🔍 Test Message"]
+        ["📡 Set OTP Log Channel", "📡 API Status"],  // NEW
+        ["🔑 Manage Tokens", "🔄 Rotate Token"],
+        ["⏱️ Set Rate Limit", "🔄 Sync Numbers"],
+        ["🧹 Clean Orphans", "🔍 Test Message"],
+        ["🔄 Reset"]
     ];
 
     await bot.sendMessage(chatId, "🔧 Admin Menu", {

@@ -14,29 +14,29 @@ const {
 async function handleRemoveToken(bot, chatId) {
     try {
         const tokenStatus = otpWatcher.getTokenStatus();
-        
+
         if (tokenStatus.length === 0) {
             await bot.sendMessage(chatId, "❌ No tokens to remove.");
             return;
         }
-        
+
         let message = `🗑️ *Remove Token*\n\nSelect a token to remove:\n\n`;
-        
+
         const keyboard = {
             inline_keyboard: []
         };
-        
+
         for (const token of tokenStatus) {
             const statusIcon = token.active ? '🟢' : '🔴';
             keyboard.inline_keyboard.push([
                 { text: `${statusIcon} Token ${token.id}`, callback_data: `remove_token_${token.id}` }
             ]);
         }
-        
+
         keyboard.inline_keyboard.push([
             { text: "❌ Cancel", callback_data: "close_tokens" }
         ]);
-        
+
         await bot.sendMessage(chatId, message, {
             parse_mode: "Markdown",
             reply_markup: keyboard
@@ -64,10 +64,10 @@ module.exports = function (bot) {
                     await bot.sendMessage(chatId, "❌ Only admins can send broadcasts.");
                     return;
                 }
-                
+
                 const broadcastMsg = state.runtime.broadcastMessage;
                 const userCount = state.runtime.broadcastUserCount || Object.keys(state.users).length;
-                
+
                 if (!broadcastMsg) {
                     await bot.editMessageText(
                         "❌ No broadcast message found.",
@@ -78,7 +78,7 @@ module.exports = function (bot) {
                     );
                     return;
                 }
-                
+
                 let sent = 0;
                 for (const uid of Object.keys(state.users)) {
                     try {
@@ -88,12 +88,12 @@ module.exports = function (bot) {
                         logger.error(`Failed to send broadcast to ${uid}:`, err.message);
                     }
                 }
-                
+
                 state.runtime.broadcastMessage = null;
                 state.runtime.broadcastUserCount = null;
                 state.runtime.waitingBroadcast = null;
                 saveState();
-                
+
                 await bot.editMessageText(
                     `✅ Broadcast sent to ${sent}/${userCount} users!`,
                     {
@@ -103,18 +103,18 @@ module.exports = function (bot) {
                 );
                 return;
             }
-            
+
             if (data === "cancel_broadcast") {
                 if (!isAdmin) {
                     await bot.sendMessage(chatId, "❌ Only admins can cancel broadcasts.");
                     return;
                 }
-                
+
                 state.runtime.broadcastMessage = null;
                 state.runtime.broadcastUserCount = null;
                 state.runtime.waitingBroadcast = null;
                 saveState();
-                
+
                 await bot.editMessageText(
                     "❌ Broadcast cancelled.",
                     {
@@ -144,7 +144,7 @@ module.exports = function (bot) {
                 saveState();
                 return;
             }
-            
+
             if (data === "cancel_erase_number") {
                 if (!isAdmin) {
                     await bot.sendMessage(chatId, "❌ Only admins can cancel this action.");
@@ -182,7 +182,7 @@ module.exports = function (bot) {
                 saveState();
                 return;
             }
-            
+
             if (data === "cancel_erase_assigned") {
                 if (!isAdmin) {
                     await bot.sendMessage(chatId, "❌ Only admins can cancel this action.");
@@ -219,7 +219,7 @@ module.exports = function (bot) {
                 saveState();
                 return;
             }
-            
+
             if (data === "cancel_clear_stats") {
                 if (!isAdmin) {
                     await bot.sendMessage(chatId, "❌ Only admins can cancel this action.");
@@ -284,7 +284,7 @@ module.exports = function (bot) {
                 saveState();
                 return;
             }
-            
+
             if (data === "cancel_reset_all") {
                 if (!isAdmin) {
                     await bot.sendMessage(chatId, "❌ Only admins can cancel this action.");
@@ -573,6 +573,29 @@ module.exports = function (bot) {
 
             if (data === "close_tokens") {
                 await bot.deleteMessage(chatId, query.message.message_id);
+                return;
+            }
+
+            // ===== ADD: OTP Log Channel ক্লোজ করার জন্য =====
+            if (data === "close_otp_channel") {
+                await bot.deleteMessage(chatId, query.message.message_id);
+                return;
+            }
+
+
+            // ===== COPY OTP HANDLER =====
+            if (data.startsWith("copy_otp_")) {
+                const otp = data.replace("copy_otp_", "");
+                try {
+                    await bot.answerCallbackQuery(query.id, {
+                        text: `✅ OTP ${otp} copied to clipboard!`,
+                        show_alert: false
+                    });
+                    // OTP টি কপি করার জন্য টেলিগ্রামে copy text সাপোর্ট
+                    await bot.sendMessage(chatId, `📋 OTP: \`${otp}\``, { parse_mode: "Markdown" });
+                } catch (err) {
+                    logger.error("Copy OTP error:", err.message);
+                }
                 return;
             }
 

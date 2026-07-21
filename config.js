@@ -37,7 +37,9 @@ module.exports = {
         perPage: parseInt(process.env.API_PER_PAGE) || 25
     },
     admins: (process.env.ADMIN_ID || "8051523187,7598185964").split(",").map(id => id.trim()),
-    getTokens: getTokens
+    getTokens: getTokens,
+    botUsername: process.env.BOT_USERNAME || "EDGE_OTP_Bot",
+    otpGroupUsername: process.env.OTP_GROUP_USERNAME || "" // NEW
 };
 
 // Initialize tokens from state

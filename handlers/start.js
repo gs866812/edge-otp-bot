@@ -2,6 +2,16 @@ const { state, saveState } = require("../state");
 const config = require("../config");
 
 function getMenuKeyboard(isAdmin) {
+    const baseKeyboard = [
+        ["📱 Get Number", "ℹ️ Your Info"],
+        ["💰 Withdraw OTP"]
+    ];
+    
+    // ===== OTP গ্রুপে যাওয়ার বাটন =====
+    if (config.otpGroupUsername) {
+        baseKeyboard.push(["📡 OTP Log Group"]);
+    }
+    
     if (isAdmin) {
         return [
             ["📱 Get Number", "➕ Add Number"],
@@ -11,17 +21,15 @@ function getMenuKeyboard(isAdmin) {
             ["🧹 Erase Assigned", "📊 Clear User Stats"],
             ["🧹 Clear Single Stats", "⚙️ On/Off"],
             ["💰 Withdraw On/Off", "📡 Set Channel ID"],
-            ["📡 API Status", "🔑 Manage Tokens"],
-            ["🔄 Rotate Token", "⏱️ Set Rate Limit"],
-            ["🔄 Sync Numbers", "🔄 Reset"],
-            ["🧹 Clean Orphans", "🔍 Test Message"]
-        ];
-    } else {
-        return [
-            ["📱 Get Number", "ℹ️ Your Info"],
-            ["💰 Withdraw OTP"]
+            ["📡 Set OTP Log Channel", "📡 API Status"],
+            ["🔑 Manage Tokens", "🔄 Rotate Token"],
+            ["⏱️ Set Rate Limit", "🔄 Sync Numbers"],
+            ["🧹 Clean Orphans", "🔍 Test Message"],
+            ["🔄 Reset"]
         ];
     }
+    
+    return baseKeyboard;
 }
 
 module.exports = function(bot) {
@@ -31,7 +39,7 @@ module.exports = function(bot) {
         const user = msg.from;
         const isAdmin = config.admins.includes(userId);
         
-        // ===== CLEAR RUNTIME STATES =====
+        // Clear runtime states
         state.runtime.waitingAddNumbers = null;
         state.runtime.waitingBroadcast = null;
         state.runtime.waitingChannelId = null;
@@ -71,7 +79,6 @@ module.exports = function(bot) {
         const isRemoved = isPending && state.pendingUsers[userId]?.status === "removed";
         const isRejected = isPending && state.pendingUsers[userId]?.status === "rejected";
         
-        // If user is removed or rejected, allow them to send request again
         if (isRemoved || isRejected) {
             delete state.pendingUsers[userId];
             saveState();

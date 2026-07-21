@@ -9,7 +9,7 @@ function getTokensFromState() {
             .filter(t => t.active !== false)
             .map(t => `${t.id}|${t.token}`);
     }
-    return config.getTokens() || [];
+    return [];
 }
 
 // API Configuration
@@ -31,13 +31,66 @@ let isProcessing = false;
 let tokenStatus = {};
 let botInstance = null;
 
+// ===== OTP লগ গ্রুপে সেন্ড করার ফাংশন (আপডেটেড) =====
+async function sendOtpToLogChannel(bot, number, otp, userId, source = 'auto') {
+    const channelId = state.settings.otpLogChannelId;
+    if (!channelId) return false;
+
+    try {
+        // নাম্বার মাস্ক করা (শেষ ৪ ডিজিট দেখানো)
+        const cleanNumber = number.replace(/[^\d]/g, '');
+        const last4 = cleanNumber.slice(-4);
+        const firstPart = cleanNumber.slice(0, cleanNumber.length - 4);
+        // প্রথম ৩ ডিজিট দেখানো, বাকি * দিয়ে মাস্ক
+        const visibleFirst = firstPart.slice(0, 3);
+        const maskedMiddle = firstPart.slice(3).replace(/\d/g, '*');
+        const displayNumber = number.startsWith('+')
+            ? `+${visibleFirst}${maskedMiddle}${last4}`
+            : `${visibleFirst}${maskedMiddle}${last4}`;
+
+        const sourceText = source === 'auto' ? '🔄 Auto' : '🔍 Manual';
+        const botUsername = config.botUsername || 'EDGE_OTP_Bot';
+        const botLink = `https://t.me/${botUsername}`;
+
+        // ===== NEW: improved message format with inline buttons =====
+        const message =
+            `📱 *OTP Received*\n\n` +
+            `📌 *Number:* \`${displayNumber}\`\n` +
+            `🔑 *OTP:* \`${otp}\`\n` +
+            `🆔 *User ID:* \`${userId}\`\n` +
+            `📡 *Source:* ${sourceText}\n` +
+            `⏱️ *Time:* ${new Date().toLocaleString()}`;
+
+        const keyboard = {
+            inline_keyboard: [
+                [
+                    {
+                        text: "🤖 Go to Bot",
+                        url: botLink
+                    }
+                ]
+            ]
+        };
+
+        await bot.sendMessage(channelId, message, {
+            parse_mode: "Markdown",
+            reply_markup: keyboard
+        });
+        logger.info(`📤 OTP sent to log channel: ${otp} for ${displayNumber}`);
+        return true;
+    } catch (err) {
+        logger.error(`Failed to send OTP to log channel:`, err.message);
+        return false;
+    }
+}
+
 // ===== TOKEN MANAGEMENT FUNCTIONS =====
 
 function addToken(tokenId, token) {
     if (!state.tokens) {
         state.tokens = { list: [], lastUpdate: null };
     }
-    
+
     const existingIndex = state.tokens.list.findIndex(t => t.id === tokenId);
     if (existingIndex !== -1) {
         state.tokens.list[existingIndex].token = token;
@@ -53,75 +106,75 @@ function addToken(tokenId, token) {
             lastChecked: new Date().toISOString()
         });
     }
-    
+
     state.tokens.lastUpdate = new Date().toISOString();
     saveState();
-    
+
     API_CONFIG.tokens = getTokensFromState();
     reinitializeTokenStatus();
-    
+
     logger.info(`✅ Token ${tokenId} added/updated successfully`);
     return true;
 }
 
 function removeToken(tokenId) {
     if (!state.tokens) return false;
-    
+
     const index = state.tokens.list.findIndex(t => t.id === tokenId);
     if (index === -1) return false;
-    
+
     state.tokens.list.splice(index, 1);
     state.tokens.lastUpdate = new Date().toISOString();
     saveState();
-    
+
     API_CONFIG.tokens = getTokensFromState();
     reinitializeTokenStatus();
-    
+
     logger.info(`🗑️ Token ${tokenId} removed`);
     return true;
 }
 
 function deactivateToken(tokenId) {
     if (!state.tokens) return false;
-    
+
     const token = state.tokens.list.find(t => t.id === tokenId);
     if (!token) return false;
-    
+
     token.active = false;
     token.errorCount = (token.errorCount || 0) + 1;
     token.lastChecked = new Date().toISOString();
     state.tokens.lastUpdate = new Date().toISOString();
     saveState();
-    
+
     API_CONFIG.tokens = getTokensFromState();
     reinitializeTokenStatus();
-    
+
     logger.warn(`⚠️ Token ${tokenId} deactivated (invalid)`);
     return true;
 }
 
 function reactivateToken(tokenId) {
     if (!state.tokens) return false;
-    
+
     const token = state.tokens.list.find(t => t.id === tokenId);
     if (!token) return false;
-    
+
     token.active = true;
     token.errorCount = 0;
     token.lastChecked = new Date().toISOString();
     state.tokens.lastUpdate = new Date().toISOString();
     saveState();
-    
+
     API_CONFIG.tokens = getTokensFromState();
     reinitializeTokenStatus();
-    
+
     logger.info(`✅ Token ${tokenId} reactivated`);
     return true;
 }
 
 function getTokenStatus() {
     if (!state.tokens) return [];
-    
+
     return state.tokens.list.map(t => ({
         id: t.id,
         active: t.active !== false,
@@ -133,12 +186,12 @@ function getTokenStatus() {
 function reinitializeTokenStatus() {
     const tokens = getTokensFromState();
     tokenStatus = {};
-    
+
     tokens.forEach((tokenString, index) => {
         const parts = tokenString.split('|');
         const tokenId = parts[0] || `token_${index + 1}`;
         const token = parts.slice(1).join('|') || tokenString;
-        
+
         const stateToken = state.tokens?.list?.find(t => t.id === tokenId);
         const isActive = stateToken ? stateToken.active !== false : true;
 
@@ -159,12 +212,12 @@ function reinitializeTokenStatus() {
 function initializeTokenStatus() {
     const tokens = getTokensFromState();
     tokenStatus = {};
-    
+
     tokens.forEach((tokenString, index) => {
         const parts = tokenString.split('|');
         const tokenId = parts[0] || `token_${index + 1}`;
         const token = parts.slice(1).join('|') || tokenString;
-        
+
         const stateToken = state.tokens?.list?.find(t => t.id === tokenId);
         const isActive = stateToken ? stateToken.active !== false : true;
 
@@ -184,11 +237,11 @@ function initializeTokenStatus() {
 
 async function checkInvalidTokens(bot) {
     const invalidTokens = state.tokens?.list?.filter(t => t.active === false) || [];
-    
+
     if (invalidTokens.length > 0) {
         const adminIds = config.admins || [];
         const tokenIds = invalidTokens.map(t => t.id).join(', ');
-        
+
         for (const adminId of adminIds) {
             try {
                 await bot.sendMessage(
@@ -197,8 +250,7 @@ async function checkInvalidTokens(bot) {
                     `The following token(s) are invalid:\n` +
                     `📌 ${tokenIds}\n\n` +
                     `Please update them using:\n` +
-                    `🔑 /addtoken ID|TOKEN\n\n` +
-                    `Or use the admin menu: "🔑 Manage Tokens"`,
+                    `🔑 "Manage Tokens" from admin menu`,
                     { parse_mode: "Markdown" }
                 );
             } catch (err) {
@@ -240,13 +292,18 @@ function extractOtpFromMessage(message) {
         /Код:\s*(\d{4,8})/i,
         /PIN:\s*(\d{4,8})/i,
         /pin:\s*(\d{4,8})/i,
+        /login\s*(\d{4,8})/i,
+        /confirm\s*(\d{4,8})/i,
         /\b(\d{4,8})\b/
     ];
 
     for (const pattern of patterns) {
         const match = message.match(pattern);
         if (match && match[1]) {
-            return match[1];
+            const otp = match[1];
+            if (/^\d{4,8}$/.test(otp)) {
+                return otp;
+            }
         }
     }
 
@@ -254,9 +311,17 @@ function extractOtpFromMessage(message) {
     return fallbackMatch ? fallbackMatch[0] : null;
 }
 
-async function sendOtpToUser(bot, number, userId, otp, fullMessage, createdAt, service, destination) {
+// ===== UPDATED: sendOtpToUser with proper counting =====
+async function sendOtpToUser(bot, number, userId, otp, fullMessage, createdAt, service, destination, source = 'auto') {
     try {
-        const message = 
+        // ডুপ্লিকেট চেক
+        const otpKey = `${number}|${otp}`;
+        if (state.processedOtpIds && state.processedOtpIds[otpKey] === userId) {
+            logger.info(`⏭️ Duplicate OTP blocked: ${otp} for ${number} (already sent to ${userId})`);
+            return { sent: false, duplicate: true };
+        }
+
+        const message =
             `📱 *OTP Received*\n\n` +
             `Service: ${service || 'Unknown'}\n` +
             `Number: \`${number}\`\n\n` +
@@ -266,7 +331,24 @@ async function sendOtpToUser(bot, number, userId, otp, fullMessage, createdAt, s
             `📋 Tap on the OTP to copy it.`;
 
         await bot.sendMessage(userId, message, { parse_mode: "Markdown" });
-        logger.info(`✅ OTP sent to user ${userId}: ${otp}`);
+
+        // OTP প্রসেস করা হয়েছে মার্ক করা
+        if (!state.processedOtpIds) state.processedOtpIds = {};
+        state.processedOtpIds[otpKey] = userId;
+
+        // ===== FIX: OTP কাউন্ট আপডেট (auto এবং manual উভয়ের জন্য) =====
+        if (!state.userStats[userId]) {
+            state.userStats[userId] = { assigned: 0, successOtp: 0, noOtp: 0, withdrawCount: 0 };
+        }
+        state.userStats[userId].successOtp = (state.userStats[userId].successOtp || 0) + 1;
+
+        // OTP লগ গ্রুপে সেন্ড করা (শুধু ইউজার আইডি সহ)
+        await sendOtpToLogChannel(bot, number, otp, userId, source);
+
+        saveState();
+
+        logger.info(`✅ OTP sent to user ${userId}: ${otp} (Total: ${state.userStats[userId].successOtp})`);
+        return { sent: true, duplicate: false };
 
     } catch (err) {
         logger.error(`Failed to send OTP to user ${userId}:`, err.message);
@@ -278,13 +360,13 @@ function isTokenRateLimited(tokenIndex) {
     const status = tokenStatus[tokenIndex];
     if (!status) return true;
     const now = Date.now();
-    
+
     if (now - status.rateLimitReset > 60000) {
         status.requestsThisMinute = 0;
         status.rateLimitReset = now;
         return false;
     }
-    
+
     if (status.requestsThisMinute >= rateLimitTracker.maxRequests) {
         return true;
     }
@@ -295,7 +377,7 @@ function incrementTokenRequests(tokenIndex) {
     const status = tokenStatus[tokenIndex];
     if (!status) return;
     const now = Date.now();
-    
+
     if (now - status.rateLimitReset > 60000) {
         status.requestsThisMinute = 0;
         status.rateLimitReset = now;
@@ -305,9 +387,9 @@ function incrementTokenRequests(tokenIndex) {
 
 module.exports = function startOtpWatcher(bot) {
     botInstance = bot;
-    
+
     initializeTokenStatus();
-    
+
     const tokens = getTokensFromState();
     if (tokens.length === 0) {
         logger.error("No API tokens configured!");
@@ -332,7 +414,7 @@ module.exports = function startOtpWatcher(bot) {
     setTimeout(() => {
         fetchAndProcessOtps(bot);
     }, 3000);
-    
+
     setInterval(() => {
         checkInvalidTokens(bot);
     }, 300000);
@@ -391,15 +473,14 @@ function getNextAvailableToken() {
     return selected;
 }
 
-// ===== FIXED fetchOtpRecords =====
 async function fetchOtpRecords(token, tokenIndex, page = 1) {
     const { baseUrl, perPage } = API_CONFIG;
-    
+
     const today = new Date();
     const endDate = new Date(today);
     const startDate = new Date(today);
     startDate.setDate(startDate.getDate() - 7);
-    
+
     const startDateStr = startDate.toISOString();
     const endDateStr = endDate.toISOString();
 
@@ -412,8 +493,6 @@ async function fetchOtpRecords(token, tokenIndex, page = 1) {
     url.searchParams.append('sortDirection', 'desc');
     url.searchParams.append('period[0]', startDateStr);
     url.searchParams.append('period[1]', endDateStr);
-
-    logger.debug(`📡 Fetching URL: ${url.toString()}`);
 
     const options = {
         method: 'GET',
@@ -455,7 +534,7 @@ async function fetchOtpRecords(token, tokenIndex, page = 1) {
         }
 
         const data = await response.json();
-        
+
         let records = [];
         if (data.data && Array.isArray(data.data)) {
             records = data.data;
@@ -468,21 +547,10 @@ async function fetchOtpRecords(token, tokenIndex, page = 1) {
             return [];
         }
 
-        logger.info(`✅ Fetched ${records.length} records from API`);
-        
-        if (records.length > 0) {
-            const sample = records.slice(0, 3).map(r => ({
-                number: r.b_number || r.num || r.number || 'N/A',
-                hasOtp: !!(extractOtpFromMessage(r.message || r.text || ''))
-            }));
-            logger.debug(`📋 Sample records: ${JSON.stringify(sample)}`);
-        }
-
         return records;
 
     } catch (err) {
         logger.error("❌ Failed to fetch OTP records:", err.message);
-        logger.error(err.stack);
         return null;
     }
 }
@@ -496,9 +564,7 @@ async function notifyAdminAboutInvalidToken(tokenId) {
                 `⚠️ *Token Invalid*\n\n` +
                 `Token ID: \`${tokenId}\`\n` +
                 `Status: ❌ Invalid/Expired\n\n` +
-                `Please update this token using:\n` +
-                `📌 /addtoken ${tokenId}|NEW_TOKEN\n\n` +
-                `Or use admin menu: "🔑 Manage Tokens"`,
+                `Please update this token using admin menu: "🔑 Manage Tokens"`,
                 { parse_mode: "Markdown" }
             );
         } catch (err) {
@@ -507,6 +573,7 @@ async function notifyAdminAboutInvalidToken(tokenId) {
     }
 }
 
+// ===== FIXED: fetchAndProcessOtps with better error handling =====
 async function fetchAndProcessOtps(bot) {
     try {
         isProcessing = true;
@@ -519,9 +586,9 @@ async function fetchAndProcessOtps(bot) {
         }
 
         const { token, index, id } = tokenInfo;
-        
+
         logger.info(`🔄 Fetching with token: ${id}`);
-        
+
         const records = await fetchOtpRecords(token, index);
 
         if (records === null) {
@@ -538,19 +605,17 @@ async function fetchAndProcessOtps(bot) {
         tokenStatus[index].lastSuccess = new Date().toISOString();
 
         if (!records || records.length === 0) {
-            logger.info(`ℹ️ No records found for token ${id}`);
             isProcessing = false;
             return;
         }
 
         tokenStatus[index].totalFetched += records.length;
-        logger.info(`📊 Token ${id} fetched ${records.length} OTP records`);
 
         let processedCount = 0;
         let sentCount = 0;
         let duplicateCount = 0;
         let noUserCount = 0;
-        
+
         for (const record of records) {
             const result = await processOtpRecord(bot, record);
             if (result) {
@@ -569,16 +634,16 @@ async function fetchAndProcessOtps(bot) {
 
     } catch (err) {
         logger.error("Error in OTP watcher:", err.message);
-        logger.error(err.stack);
     } finally {
         isProcessing = false;
     }
 }
 
+// ===== FIXED: processOtpRecord with proper counting =====
 async function processOtpRecord(bot, record) {
     try {
         let b_number, message, created_at, a_number, destination;
-        
+
         if (record.b_number) {
             b_number = record.b_number;
         } else if (record.num) {
@@ -604,34 +669,33 @@ async function processOtpRecord(bot, record) {
             return { sent: false };
         }
 
-        logger.info(`✅ OTP: ${otp} for number: ${normalizedNumber}`);
-
-        const messageId = `${normalizedNumber}|${otp}|${created_at}`;
-
+        // ডুপ্লিকেট চেক
+        const recordId = record.id || record._id || `${normalizedNumber}|${otp}|${created_at}`;
         const lastProcessed = state.lastProcessedMessage || {};
-        if (lastProcessed[normalizedNumber] === messageId) {
+
+        if (lastProcessed[normalizedNumber] === recordId) {
             return { sent: false, duplicate: true };
         }
 
         const lastOtp = state.lastOtpByNumber[normalizedNumber];
         if (lastOtp === otp) {
-            lastProcessedId[normalizedNumber] = messageId;
+            lastProcessedId[normalizedNumber] = recordId;
             return { sent: false, duplicate: true };
         }
 
         let userId = null;
-        
+
         userId = state.numberOwners[normalizedNumber];
-        
+
         if (!userId) {
             const withoutPlus = normalizedNumber.replace('+', '');
             userId = state.numberOwners[withoutPlus];
         }
-        
+
         if (!userId) {
             userId = state.numberOwners[b_number];
         }
-        
+
         if (!userId && numberWithoutCountry) {
             for (const [key, value] of Object.entries(state.numberOwners)) {
                 const keyWithoutCountry = getNumberWithoutCountryCode(key);
@@ -644,24 +708,23 @@ async function processOtpRecord(bot, record) {
 
         if (userId) {
             logger.info(`📤 Sending OTP ${otp} to user ${userId} for number ${normalizedNumber}`);
-            
+
             try {
-                await sendOtpToUser(bot, normalizedNumber, userId, otp, message, created_at, a_number, destination);
+                // ===== FIX: sendOtpToUser এখন কাউন্ট করবে =====
+                const result = await sendOtpToUser(bot, normalizedNumber, userId, otp, message, created_at, a_number, destination, 'auto');
 
-                state.lastOtpByNumber[normalizedNumber] = otp;
-                lastProcessedId[normalizedNumber] = messageId;
-                state.lastProcessedMessage = lastProcessedId;
+                if (result.sent) {
+                    state.lastOtpByNumber[normalizedNumber] = otp;
+                    lastProcessedId[normalizedNumber] = recordId;
+                    state.lastProcessedMessage = lastProcessedId;
+                    saveState();
 
-                if (!state.userStats[userId]) {
-                    state.userStats[userId] = { assigned: 0, successOtp: 0, noOtp: 0, withdrawCount: 0 };
+                    logger.info(`✅ OTP sent to user ${userId} (Count: ${state.userStats[userId]?.successOtp || 0})`);
+                    return { sent: true };
+                } else if (result.duplicate) {
+                    return { sent: false, duplicate: true };
                 }
-                state.userStats[userId].successOtp = (state.userStats[userId].successOtp || 0) + 1;
 
-                saveState();
-
-                logger.info(`✅ OTP sent to user ${userId}`);
-                return { sent: true };
-                
             } catch (err) {
                 logger.error(`Failed to send OTP to user ${userId}:`, err.message);
                 return { sent: false };
@@ -669,11 +732,11 @@ async function processOtpRecord(bot, record) {
         }
 
         logger.warn(`⚠️ Number ${normalizedNumber} not assigned - OTP ${otp} not sent`);
-        
-        lastProcessedId[normalizedNumber] = messageId;
+
+        lastProcessedId[normalizedNumber] = recordId;
         state.lastProcessedMessage = lastProcessedId;
         saveState();
-        
+
         return { sent: false, noUser: true };
 
     } catch (err) {
@@ -702,9 +765,8 @@ function logTokenStatus() {
     logger.info("===========================");
 }
 
-// ===== EXPORTED FUNCTIONS =====
-
-module.exports.adminManualCheck = async function(bot, adminId, number) {
+// ===== UPDATED: adminManualCheck with proper counting =====
+module.exports.adminManualCheck = async function (bot, adminId, number) {
     try {
         logger.info(`🔍 Admin manual check: ${number} (Admin: ${adminId})`);
 
@@ -736,22 +798,34 @@ module.exports.adminManualCheck = async function(bot, adminId, number) {
                 let recordNumber = record.b_number || record.num || record.number || record.phone || '';
                 const recordNormalized = normalizeNumber(recordNumber);
                 const recordWithoutCountry = getNumberWithoutCountryCode(recordNumber);
-                
-                if (recordNormalized === normalizedNumber || 
+
+                if (recordNormalized === normalizedNumber ||
                     recordNormalized.replace('+', '') === normalizedNumber.replace('+', '') ||
                     recordNumber === number ||
                     (recordWithoutCountry && recordWithoutCountry === numberWithoutCountry)) {
-                    
+
                     const otp = extractOtpFromMessage(record.message || record.text || '');
                     if (otp) {
-                        await sendOtpToUser(bot, normalizedNumber, adminId, otp, record.message || '', record.created_at || record.dt, record.a_number || record.cli, record.destination);
-                        
+                        // Check duplicate
+                        const otpKey = `${normalizedNumber}|${otp}`;
+                        if (state.processedOtpIds && state.processedOtpIds[otpKey] === adminId) {
+                            return {
+                                success: false,
+                                message: `⏭️ OTP ${otp} already sent to you.`
+                            };
+                        }
+
+                        // ===== FIX: sendOtpToUser will count =====
+                        await sendOtpToUser(bot, normalizedNumber, adminId, otp, record.message || '', record.created_at || record.dt, record.a_number || record.cli, record.destination, 'manual');
+
                         state.lastOtpByNumber[normalizedNumber] = otp;
+                        if (!state.processedOtpIds) state.processedOtpIds = {};
+                        state.processedOtpIds[otpKey] = adminId;
                         saveState();
-                        
+
                         return {
                             success: true,
-                            message: `✅ OTP ${otp} found and sent to admin!`
+                            message: `✅ OTP ${otp} found and sent to admin! (Total: ${state.userStats[adminId]?.successOtp || 0})`
                         };
                     }
                 }
@@ -769,7 +843,8 @@ module.exports.adminManualCheck = async function(bot, adminId, number) {
     }
 };
 
-module.exports.manualCheck = async function(bot, userId, number) {
+// ===== UPDATED: manualCheck with proper counting =====
+module.exports.manualCheck = async function (bot, userId, number) {
     try {
         logger.info(`🔍 User ${userId} manual check: ${number}`);
 
@@ -823,21 +898,33 @@ module.exports.manualCheck = async function(bot, userId, number) {
                 let recordNumber = record.b_number || record.num || record.number || record.phone || '';
                 const recordNormalized = normalizeNumber(recordNumber);
                 const recordWithoutCountry = getNumberWithoutCountryCode(recordNumber);
-                
-                if (recordNormalized === normalizedNumber || 
+
+                if (recordNormalized === normalizedNumber ||
                     recordNormalized.replace('+', '') === normalizedNumber.replace('+', '') ||
                     (recordWithoutCountry && recordWithoutCountry === numberWithoutCountry)) {
-                    
+
                     const otp = extractOtpFromMessage(record.message || record.text || '');
                     if (otp) {
-                        await sendOtpToUser(bot, normalizedNumber, userId, otp, record.message || '', record.created_at || record.dt, record.a_number || record.cli, record.destination);
-                        
+                        // Check duplicate
+                        const otpKey = `${normalizedNumber}|${otp}`;
+                        if (state.processedOtpIds && state.processedOtpIds[otpKey] === userId) {
+                            return {
+                                success: false,
+                                message: `⏭️ OTP ${otp} already sent to you.`
+                            };
+                        }
+
+                        // ===== FIX: sendOtpToUser will count =====
+                        await sendOtpToUser(bot, normalizedNumber, userId, otp, record.message || '', record.created_at || record.dt, record.a_number || record.cli, record.destination, 'manual');
+
                         state.lastOtpByNumber[normalizedNumber] = otp;
+                        if (!state.processedOtpIds) state.processedOtpIds = {};
+                        state.processedOtpIds[otpKey] = userId;
                         saveState();
-                        
+
                         return {
                             success: true,
-                            message: `✅ OTP ${otp} found and sent!`
+                            message: `✅ OTP ${otp} found and sent! (Total: ${state.userStats[userId]?.successOtp || 0})`
                         };
                     }
                 }
@@ -861,7 +948,7 @@ module.exports.getTokenStatus = getTokenStatus;
 module.exports.reinitializeTokenStatus = reinitializeTokenStatus;
 
 // Get API status
-module.exports.getApiStatus = async function() {
+module.exports.getApiStatus = async function () {
     const status = {
         totalTokens: Object.keys(tokenStatus).length,
         activeTokens: 0,
@@ -874,7 +961,7 @@ module.exports.getApiStatus = async function() {
     for (const [index, tokenStat] of Object.entries(tokenStatus)) {
         const isActive = tokenStat.active && tokenStat.errorCount < 3;
         const isLimited = isTokenRateLimited(parseInt(index));
-        
+
         status.tokenDetails.push({
             index: parseInt(index) + 1,
             id: tokenStat.id,
@@ -885,7 +972,7 @@ module.exports.getApiStatus = async function() {
             requestsThisMinute: tokenStat.requestsThisMinute || 0,
             lastSuccess: tokenStat.lastSuccess || 'Never'
         });
-        
+
         if (isActive && !isLimited) {
             status.activeTokens++;
         } else {
@@ -898,7 +985,7 @@ module.exports.getApiStatus = async function() {
     return status;
 };
 
-module.exports.rotateToken = function() {
+module.exports.rotateToken = function () {
     const nextToken = getNextAvailableToken();
     if (nextToken) {
         logger.info(`Rotated to token ${nextToken.id}`);
@@ -908,7 +995,7 @@ module.exports.rotateToken = function() {
     return null;
 };
 
-module.exports.resetTokenStatus = function() {
+module.exports.resetTokenStatus = function () {
     for (const [index, status] of Object.entries(tokenStatus)) {
         status.active = true;
         status.errorCount = 0;
