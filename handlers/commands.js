@@ -22,7 +22,7 @@ module.exports = function(bot) {
         
         await bot.sendMessage(
             chatId,
-            `🤖 EDGE OTP Bot\n\n` +
+            `🤖 CTG IPN Bot\n\n` +
             `Version: 2.0.0\n` +
             `API Status: ${apiStatus}\n\n` +
             `Features:\n` +

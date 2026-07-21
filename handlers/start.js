@@ -124,15 +124,15 @@ module.exports = function(bot) {
             
             return bot.sendMessage(
                 chatId,
-                `👋 Welcome ${user.first_name || "User"} to EDGE OTP Bot!\n\n` +
+                `👋 Welcome ${user.first_name || "User"} to CTG IPRN Bot!\n\n` +
                 `Please click the button below to request access.`,
                 keyboard
             );
         }
         
         const welcomeMessage = isAdmin 
-            ? `👋 Welcome Admin ${user.first_name || "Admin"} to EDGE OTP Bot!`
-            : `👋 Welcome ${user.first_name || "User"} to EDGE OTP Bot!`;
+            ? `👋 Welcome Admin ${user.first_name || "Admin"} to CTG IPRN Bot!`
+            : `👋 Welcome ${user.first_name || "User"} to CTG IPRN Bot!`;
         
         const keyboard = getMenuKeyboard(isAdmin);
         

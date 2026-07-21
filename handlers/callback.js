@@ -641,7 +641,7 @@ async function handleApprove(bot, chatId, targetUserId, messageId) {
         await bot.sendMessage(
             targetUserId,
             `✅ Your join request has been approved!\n\n` +
-            `Welcome ${user.profileName || "User"} to EDGE OTP Bot!\n\n` +
+            `Welcome ${user.profileName || "User"} to CTG IPRN Bot!\n\n` +
             `Use /start to see available commands.`
         );
     } catch (err) {

@@ -25,7 +25,7 @@ registerCommandHandler(bot);
 startOtpWatcher(bot);
 
 logger.info("=================================");
-logger.info("EDGE OTP BOT STARTED");
+logger.info("CTG IPRN Bot STARTED");
 logger.info("Polling started...");
 logger.info("=================================");
 
