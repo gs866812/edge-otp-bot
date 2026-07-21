@@ -22,7 +22,7 @@ module.exports = function(bot) {
         
         await bot.sendMessage(
             chatId,
-            `🤖 CTG IPN Bot\n\n` +
+            `🤖 CTG IPRN Bot\n\n` +
             `Version: 2.0.0\n` +
             `API Status: ${apiStatus}\n\n` +
             `Features:\n` +
